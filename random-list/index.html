@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="抽籤">
+<meta name="theme-color" content="#0b0f14">
+<title>抽籤 · Random List</title>
+<style>
+  :root{
+    --bg:#0b0f14; --card:#141b23; --card2:#1b242e; --line:#26313d;
+    --fg:#e8eef5; --dim:#8fa1b3; --accent:#4ea1ff; --ok:#35d07f; --warn:#ffb020;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang HK","Noto Sans CJK TC",system-ui,sans-serif;
+    padding:16px 16px calc(24px + env(safe-area-inset-bottom));
+    max-width:640px;margin:0 auto;
+  }
+  h1{font-size:20px;margin:4px 0 14px;letter-spacing:.5px}
+  h1 small{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
+  textarea{
+    width:100%;min-height:150px;resize:vertical;background:var(--card2);color:var(--fg);
+    border:1px solid var(--line);border-radius:12px;padding:12px;font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-2px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .row > *{flex:1 1 auto}
+  select,input[type=number]{
+    background:var(--card2);color:var(--fg);border:1px solid var(--line);
+    border-radius:10px;padding:11px 10px;font-size:15px;min-width:0;
+  }
+  button{
+    border:0;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;
+    background:var(--card2);color:var(--fg);cursor:pointer;
+  }
+  button:active{transform:scale(.98)}
+  button.primary{background:var(--accent);color:#04121f;width:100%;font-size:18px;padding:17px}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-size:14px;padding:10px 12px;flex:0 0 auto}
+  .result{
+    min-height:86px;display:flex;align-items:center;justify-content:center;text-align:center;
+    font-size:30px;font-weight:700;line-height:1.25;word-break:break-word;
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:12px;
+  }
+  .result.rolling{color:var(--dim)}
+  .result.done{background:linear-gradient(180deg,#14301f,#0f1b16);border-color:#2b6b47;color:var(--ok)}
+  .meta{font-size:13px;color:var(--dim);text-align:center;margin:-4px 0 12px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .chip{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-size:13px;color:var(--dim)}
+  .chip b{color:var(--fg);font-weight:600}
+  .switch{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--dim);flex:1 1 auto}
+  .switch input{width:20px;height:20px;accent-color:var(--accent)}
+  .hist{list-style:none;margin:8px 0 0;padding:0;max-height:180px;overflow:auto}
+  .hist li{padding:8px 10px;border-bottom:1px dashed var(--line);font-size:15px}
+  .hist li:last-child{border-bottom:0}
+  .hist li span{color:var(--dim);font-size:12px;margin-right:8px}
+  .hint{font-size:12px;color:var(--dim);margin-top:8px}
+  .hidden{display:none !important}
+</style>
+</head>
+<body>
+<h1>抽籤 <small>random list</small></h1>
+
+<div class="result" id="result">準備好就抽</div>
+<div class="meta" id="meta"></div>
+
+<div class="card">
+  <label>名單（每行一個）</label>
+  <textarea id="list" spellcheck="false" placeholder="陳大文&#10;李小明&#10;黃小美&#10;&#10;或 1-100 咁樣輸入範圍"></textarea>
+  <div class="chips" id="chips"></div>
+  <div class="row">
+    <select id="mode">
+      <option value="pick">抽 N 個（不重複）</option>
+      <option value="shuffle">全部洗牌排序</option>
+      <option value="one">逐個抽（抽完唔重複）</option>
+      <option value="num">隨機數字</option>
+    </select>
+    <input type="number" id="count" value="1" min="1" step="1" aria-label="數量">
+  </div>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="sound" checked> 音效</label>
+    <label class="switch"><input type="checkbox" id="dedupe" checked> 去除重複行</label>
+  </div>
+</div>
+
+<button class="primary" id="draw">抽！</button>
+
+<div class="row" style="margin-top:10px">
+  <button class="ghost" id="reset">重設（清空已抽）</button>
+  <button class="ghost" id="copy">複製結果</button>
+  <button class="ghost" id="clear">清空名單</button>
+</div>
+
+<div class="card" id="histCard">
+  <label>今次抽過（<span id="histCount">0</span>）</label>
+  <ul class="hist" id="hist"></ul>
+  <div class="hint">名單自動儲存喺呢部機（localStorage），下次打開仲喺度。</div>
+</div>
+
+<script>
+const LS = 'randomList.v1';
+const $ = id => document.getElementById(id);
+const els = {
+  list:$('list'), mode:$('mode'), count:$('count'), draw:$('draw'), result:$('result'),
+  meta:$('meta'), chips:$('chips'), hist:$('hist'), histCount:$('histCount'),
+  sound:$('sound'), dedupe:$('dedupe'), reset:$('reset'), copy:$('copy'), clear:$('clear'),
+  histCard:$('histCard')
+};
+
+let drawn = [];          // already drawn (for "one" mode & history)
+let rolling = false;
+
+/* ---------- state ---------- */
+function save(){
+  try{
+    localStorage.setItem(LS, JSON.stringify({
+      list: els.list.value, mode: els.mode.value, count: els.count.value,
+      sound: els.sound.checked, dedupe: els.dedupe.checked, drawn
+    }));
+  }catch(e){}
+}
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS) || 'null');
+    if(!s) return;
+    els.list.value = s.list || '';
+    if(s.mode) els.mode.value = s.mode;
+    if(s.count) els.count.value = s.count;
+    if(typeof s.sound === 'boolean') els.sound.checked = s.sound;
+    if(typeof s.dedupe === 'boolean') els.dedupe.checked = s.dedupe;
+    drawn = Array.isArray(s.drawn) ? s.drawn : [];
+  }catch(e){}
+}
+
+/* ---------- parsing ---------- */
+function items(){
+  let raw = els.list.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  // expand "1-100" style ranges anywhere in the text
+  const out = [];
+  for(const line of raw){
+    const m = line.match(/^(-?\d+)\s*(?:-|~|–|—|至|到)\s*(-?\d+)$/);
+    if(m){
+      let a = +m[1], b = +m[2];
+      const step = a <= b ? 1 : -1;
+      if(Math.abs(b - a) > 5000){ out.push(line); continue; }
+      for(let i = a; step > 0 ? i <= b : i >= b; i += step) out.push(String(i));
+    }else{
+      out.push(line);
+    }
+  }
+  if(els.dedupe.checked) return [...new Set(out)];
+  return out;
+}
+function pool(){
+  const all = items();
+  if(els.mode.value !== 'one') return all;
+  const left = all.filter(x => !drawn.includes(x));
+  return left;
+}
+
+/* ---------- sound ---------- */
+let ac;
+function beep(freq, dur, type='sine'){
+  if(!els.sound.checked) return;
+  try{
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.18, ac.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+    o.connect(g).connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + dur + 0.02);
+  }catch(e){}
+}
+function fanfare(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>beep(f,0.18),i*90)); }
+
+/* ---------- draw ---------- */
+function show(html, cls){
+  els.result.className = 'result' + (cls ? ' ' + cls : '');
+  els.result.innerHTML = html;
+}
+function renderHist(){
+  els.hist.innerHTML = drawn.map((x,i) => `<li><span>${i+1}.</span>${escapeHtml(x)}</li>`).join('');
+  els.histCount.textContent = drawn.length;
+  els.histCard.classList.toggle('hidden', drawn.length === 0);
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function renderChips(){
+  const n = items().length, d = drawn.length;
+  els.chips.innerHTML = `<div class="chip">項目 <b>${n}</b></div>` +
+    (els.mode.value === 'one' ? `<div class="chip">剩 <b>${Math.max(0,n-d)}</b></div><div class="chip">已抽 <b>${d}</b></div>` : '');
+}
+
+async function draw(){
+  if(rolling) return;
+  const mode = els.mode.value;
+  const n = Math.max(1, parseInt(els.count.value || '1', 10));
+
+  if(mode === 'num'){
+    const nums = items().map(Number).filter(x => Number.isFinite(x));
+    const lo = nums.length ? Math.min(...nums) : 1;
+    const hi = nums.length ? Math.max(...nums) : 100;
+    roll(async () => String(lo + Math.floor(Math.random() * (hi - lo + 1))));
+    return;
+  }
+
+  const p = pool();
+  if(p.length === 0){
+    show('冇嘢可以抽', '');
+    els.meta.textContent = els.mode.value === 'one' ? '全部抽完 — 撳「重設」再嚟' : '請先輸入名單';
+    beep(180, .2, 'square');
+    return;
+  }
+
+  if(mode === 'shuffle'){
+    const sh = [...p];
+    for(let i = sh.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [sh[i],sh[j]]=[sh[j],sh[i]]; }
+    show(sh.map(escapeHtml).join('<br>'), 'done');
+    els.meta.textContent = `${sh.length} 個已洗牌`;
+    drawn = drawn.concat(sh);
+    fanfare(); save(); renderHist(); renderChips();
+    return;
+  }
+
+  const take = Math.min(n, p.length);
+  roll(async () => {
+    const bag = [...p]; const out = [];
+    for(let i = 0; i < take; i++){
+      const k = Math.floor(Math.random() * bag.length);
+      out.push(bag.splice(k,1)[0]);
+    }
+    return out.map(escapeHtml).join('<br>');
+  }, async () => {
+    const bag = [...p]; const out = [];
+    for(let i = 0; i < take; i++){ const k = Math.floor(Math.random()*bag.length); out.push(bag.splice(k,1)[0]); }
+    drawn = drawn.concat(out);
+    els.meta.textContent = `${out.length} / ${p.length} 抽出`;
+    fanfare(); save(); renderHist(); renderChips();
+  });
+}
+
+function roll(pick, done){
+  rolling = true;
+  els.draw.disabled = true;
+  const t0 = Date.now();
+  const DUR = 1100;
+  const tick = setInterval(async () => {
+    show(await pick(), 'rolling');
+    beep(700 + Math.random()*300, .03, 'triangle');
+  }, 70);
+  setTimeout(async () => {
+    clearInterval(tick);
+    show(await pick(), 'done');
+    rolling = false;
+    els.draw.disabled = false;
+    if(done) await done();
+  }, DUR);
+}
+
+/* ---------- ui ---------- */
+els.draw.addEventListener('click', draw);
+els.list.addEventListener('input', () => { save(); renderChips(); });
+els.mode.addEventListener('change', () => {
+  const m = els.mode.value;
+  els.count.disabled = (m === 'shuffle' || m === 'num');
+  els.count.style.opacity = els.count.disabled ? .45 : 1;
+  save(); renderChips();
+});
+els.count.addEventListener('input', save);
+els.sound.addEventListener('change', save);
+els.dedupe.addEventListener('change', () => { save(); renderChips(); });
+els.reset.addEventListener('click', () => {
+  drawn = []; save(); renderHist(); renderChips();
+  show('已重設'); els.meta.textContent = '';
+  beep(420,.12);
+});
+els.clear.addEventListener('click', () => {
+  if(!confirm('清空名單？')) return;
+  els.list.value = ''; drawn = []; save(); renderHist(); renderChips(); show('準備好就抽');
+});
+els.copy.addEventListener('click', async () => {
+  const txt = els.result.innerText;
+  try{ await navigator.clipboard.writeText(txt); show(txt, 'done'); els.meta.textContent = '已複製 ✓'; }
+  catch(e){ els.meta.textContent = '複製失敗，長按結果自己複製'; }
+});
+
+load();
+els.count.disabled = (els.mode.value === 'shuffle' || els.mode.value === 'num');
+els.count.style.opacity = els.count.disabled ? .45 : 1;
+renderHist(); renderChips();
+if(!els.list.value) show('準備好就抽');
+</script>
+</body>
+</html>

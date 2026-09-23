@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="分隊">
+<meta name="theme-color" content="#0b0f14">
+<title>分隊 · Team Maker</title>
+<style>
+  :root{
+    --bg:#0b0f14; --card:#141b23; --card2:#1b242e; --line:#26313d;
+    --fg:#e8eef5; --dim:#8fa1b3; --accent:#4ea1ff; --ok:#35d07f; --warn:#ffb020; --bad:#ff5f56;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--fg);
+    font:16px/1.5 -apple-system,BlinkMacSystemFont,"PingFang HK","Noto Sans CJK TC",system-ui,sans-serif;
+    padding:16px 16px calc(24px + env(safe-area-inset-bottom));
+    max-width:640px;margin:0 auto;
+  }
+  h1{font-size:20px;margin:4px 0 14px;letter-spacing:.5px}
+  h1 small{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
+  label .tag{color:var(--fg);font-size:12px;background:var(--card2);border-radius:6px;padding:1px 6px;margin-left:6px}
+  textarea{
+    width:100%;resize:vertical;background:var(--card2);color:var(--fg);
+    border:1px solid var(--line);border-radius:12px;padding:12px;
+    font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  #people{min-height:140px}
+  .rule{min-height:64px}
+  textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-2px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .row > *{flex:1 1 auto}
+  input[type=number]{background:var(--card2);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:11px 10px;font-size:15px;min-width:0;width:100%}
+  button{border:0;border-radius:12px;padding:14px 16px;font-size:16px;font-weight:600;background:var(--card2);color:var(--fg);cursor:pointer}
+  button:active{transform:scale(.98)}
+  button.primary{background:var(--accent);color:#04121f;width:100%;font-size:18px;padding:17px}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-size:14px;padding:10px 12px;flex:0 0 auto}
+  .switch{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--dim);flex:1 1 auto}
+  .switch input{width:20px;height:20px;accent-color:var(--accent)}
+  .hint{font-size:12px;color:var(--dim);margin-top:8px}
+  .team{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;background:var(--card)}
+  .team h2{font-size:16px;margin:0 0 4px;display:flex;justify-content:space-between;align-items:center}
+  .team h2 em{font-style:normal;font-size:12px;color:var(--dim);font-weight:400}
+  .members{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+  .members li{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:14px}
+  .members li b{color:var(--accent);font-weight:600;font-size:12px;margin-left:5px}
+  .bar{height:6px;border-radius:3px;background:var(--card2);overflow:hidden;margin-top:10px}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .warn{background:#2a2113;border:1px solid #6b5220;color:var(--warn);border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:10px}
+  .good{background:#10251a;border:1px solid #2b6b47;color:var(--ok);border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:10px}
+  .hidden{display:none !important}
+  #results:empty + .hint{display:block}
+</style>
+</head>
+<body>
+<h1>分隊 <small>team maker</small></h1>
+
+<div class="card">
+  <label>名單 <span class="tag">每行一個，可加權重</span></label>
+  <textarea id="people" spellcheck="false" placeholder="陳大文 3&#10;李小明 2&#10;黃小美&#10;（唔寫數字＝權重 1）"></textarea>
+  <label style="margin-top:12px">唔可以同隊 <span class="tag">每行一對：A ! B</span></label>
+  <textarea id="cannot" class="rule" spellcheck="false" placeholder="陳大文 ! 李小明&#10;黃小美 ! 張三"></textarea>
+  <label style="margin-top:12px">必須同隊 <span class="tag">每行一對：A + B</span></label>
+  <textarea id="must" class="rule" spellcheck="false" placeholder="李小明 + 王五"></textarea>
+  <div class="row">
+    <div style="flex:1 1 110px">
+      <label>隊數</label>
+      <input type="number" id="teams" value="3" min="2" max="20" step="1">
+    </div>
+    <div style="flex:1 1 110px">
+      <label>種子（同一個＝同一個結果）</label>
+      <input type="number" id="seed" min="1" step="1" placeholder="隨機">
+    </div>
+  </div>
+  <div class="row">
+    <label class="switch"><input type="checkbox" id="balance" checked> 平均分配權重</label>
+  </div>
+  <div class="hint">規則寫法：<code>!</code> 或 <code>x</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。</div>
+</div>
+
+<button class="primary" id="go">分隊！</button>
+<div class="row" style="margin-top:10px">
+  <button class="ghost" id="reroll">重新抽（換 seed）</button>
+  <button class="ghost" id="copy">複製結果</button>
+  <button class="ghost" id="demo">載入示範</button>
+</div>
+
+<div id="status" style="margin-top:14px"></div>
+<div id="results"></div>
+
+<script>
+/* Team Maker — pure solver (no DOM).
+   Works in the browser (window.TeamSolver) and in Node (module.exports).
+   Goal: split a weighted list into T teams while (a) never putting a
+   "cannot be together" pair in the same team, (b) keeping "must be together"
+   pairs in the same team, and (c) balancing total weight per team. */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  if (root) root.TeamSolver = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  /* ---------- seeded RNG (mulberry32) ---------- */
+  function makeRng(seed) {
+    var a = (seed >>> 0) || 1;
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ---------- parsing ---------- */
+  // "陳大文" -> 1 ; "陳大文 3" / "陳大文,3" / "陳大文*3" / "陳大文(3)" / "陳大文=3" -> 3
+  function parsePeople(text) {
+    var out = [], warnings = [];
+    String(text || '').split(/\r?\n/).forEach(function (raw, i) {
+      var line = raw.trim();
+      if (!line || line.charAt(0) === '#') return;
+      var name = line, weight = 1;
+      var m = line.match(/^(.*?)[\s]*[\(\[,;*x×=]\s*(-?\d+(?:\.\d+)?)\s*[\)\]]?$/i);
+      if (m && m[1].trim()) {
+        name = m[1].trim();
+        weight = parseFloat(m[2]);
+      } else {
+        m = line.match(/^(.*?)\s+(-?\d+(?:\.\d+)?)$/);
+        if (m && m[1].trim()) { name = m[1].trim(); weight = parseFloat(m[2]); }
+      }
+      if (!isFinite(weight) || weight <= 0) {
+        warnings.push('「' + line + '」權重唔合理，當 1 計');
+        weight = 1;
+      }
+      if (weight > 100) { weight = 100; }
+      out.push({ name: name, weight: weight, line: i + 1 });
+    });
+    // de-dupe by name (keep first)
+    var seen = Object.create(null), dedup = [];
+    out.forEach(function (p) {
+      var k = p.name.toLowerCase();
+      if (seen[k]) { warnings.push('重複名「' + p.name + '」，只用第一個'); return; }
+      seen[k] = 1; dedup.push(p);
+    });
+    return { people: dedup, warnings: warnings };
+  }
+
+  // "A ! B" -> [A, B]. Separators: ! ！ + × , ， / | 、 -> → 與 同 和
+  // NOTE: a bare "x" is deliberately NOT a separator — names like "x" or "Max"
+  // must survive. Use "×" (multiplication sign) instead.
+  function splitPair(line) {
+    return line.split(/\s*(?:!|！|\+|×|,|，|\/|\||、|->|→|與|同|和)\s*/i)
+      .map(function (s) { return s.trim(); })
+      .filter(function (s) { return s.length > 0; });
+  }
+  function parsePairs(text) {
+    var pairs = [], warnings = [];
+    String(text || '').split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || line.charAt(0) === '#') return;
+      var parts = splitPair(line);
+      if (parts.length === 2) {
+        pairs.push([parts[0], parts[1]]);
+      } else if (parts.length > 2) {
+        // treat as a chain: A,B,C -> A-B, B-C, A-C
+        for (var i = 0; i < parts.length; i++) {
+          for (var j = i + 1; j < parts.length; j++) pairs.push([parts[i], parts[j]]);
+        }
+        warnings.push('「' + line + '」多過兩個名，已當全部互相組合');
+      } else {
+        warnings.push('「' + line + '」格式唔啱（要 A ! B）');
+      }
+    });
+    return { pairs: pairs, warnings: warnings };
+  }
+
+  /* ---------- union-find for "must be together" ---------- */
+  function DSU(n) {
+    this.p = []; for (var i = 0; i < n; i++) this.p.push(i);
+  }
+  DSU.prototype.find = function (x) {
+    while (this.p[x] !== x) { this.p[x] = this.p[this.p[x]]; x = this.p[x]; }
+    return x;
+  };
+  DSU.prototype.union = function (a, b) {
+    a = this.find(a); b = this.find(b);
+    if (a !== b) this.p[b] = a;
+  };
+
+  /* ---------- cost ---------- */
+  function costOf(ctx, teamOf) {
+    var loads = new Array(ctx.T).fill(0), counts = new Array(ctx.T).fill(0);
+    var conflictScore = 0, violations = [];
+    var i;
+    for (i = 0; i < ctx.blocks.length; i++) {
+      var t = teamOf[i], load = ctx.blockWeight[i];
+      if (t >= 0 && t < ctx.T) { loads[t] += load; counts[t] += ctx.blockMembers[i].length; }
+    }
+    for (i = 0; i < ctx.cannot.length; i++) {
+      var pair = ctx.cannot[i];
+      if (teamOf[ctx.blockOf[pair[0]]] === teamOf[ctx.blockOf[pair[1]]]) {
+        conflictScore += 1;
+        violations.push({ a: ctx.people[pair[0]].name, b: ctx.people[pair[1]].name });
+      }
+    }
+    var imbalance = 0;
+    if (ctx.balance) {
+      var mean = loads.reduce(function (s, v) { return s + v; }, 0) / ctx.T;
+      for (i = 0; i < ctx.T; i++) { var d = loads[i] - mean; imbalance += d * d; }
+      imbalance = imbalance / ctx.T;
+      // small nudge so team sizes stay close too
+      var cmean = counts.reduce(function (s, v) { return s + v; }, 0) / ctx.T;
+      for (i = 0; i < ctx.T; i++) { var dc = counts[i] - cmean; imbalance += dc * dc * 0.01; }
+    }
+    return { score: conflictScore * 1e6 + imbalance, conflictScore: conflictScore, imbalance: imbalance, loads: loads, counts: counts, violations: violations };
+  }
+
+  /* ---------- solve ---------- */
+  function solve(opts) {
+    opts = opts || {};
+    var T = Math.max(1, Math.min(20, parseInt(opts.teams, 10) || 2));
+    var iterations = Math.max(200, Math.min(200000, parseInt(opts.iterations, 10) || 6000));
+    var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
+    var balance = opts.balance !== false;
+    var seed = (parseInt(opts.seed, 10) || 1) >>> 0;
+    var people = (opts.people || []).slice();
+    var warnings = [];
+
+    var index = Object.create(null);
+    people.forEach(function (p, i) { index[p.name.toLowerCase()] = i; });
+
+    function resolvePairs(pairs, label) {
+      var out = [];
+      pairs.forEach(function (pr) {
+        var ia = index[pr[0].toLowerCase()], ib = index[pr[1].toLowerCase()];
+        if (ia === undefined || ib === undefined) {
+          warnings.push(label + '「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
+          return;
+        }
+        if (ia === ib) return;
+        out.push([ia, ib]);
+      });
+      return out;
+    }
+    var cannot = resolvePairs(opts.cannotPairs || [], '唔可以同隊');
+    var must = resolvePairs(opts.mustPairs || [], '必須同隊');
+
+    if (people.length === 0) {
+      return { teams: [], violations: [], warnings: ['名單係空嘅'], conflicts: [], ok: false };
+    }
+
+    var dsu = new DSU(people.length);
+    must.forEach(function (p) { dsu.union(p[0], p[1]); });
+
+    var blockIndexOf = Object.create(null), blocks = [], blockWeight = [], blockMembers = [];
+    people.forEach(function (p, i) {
+      var r = dsu.find(i);
+      if (blockIndexOf[r] === undefined) {
+        blockIndexOf[r] = blocks.length;
+        blocks.push([]); blockWeight.push(0); blockMembers.push([]);
+      }
+      var b = blockIndexOf[r];
+      blocks[b].push(i); blockWeight[b] += p.weight; blockMembers[b].push(p.name);
+    });
+    var blockOf = people.map(function (_, i) { return blockIndexOf[dsu.find(i)]; });
+
+    // contradictions: a cannot-pair that is also must-be-together
+    var conflicts = [];
+    cannot.forEach(function (p) {
+      if (blockOf[p[0]] === blockOf[p[1]]) {
+        conflicts.push({ a: people[p[0]].name, b: people[p[1]].name });
+      }
+    });
+    if (conflicts.length) {
+      warnings.push('規則本身打架：有 ' + conflicts.length + ' 對同時「必須同隊」又「唔可以同隊」，冇可能同時滿足');
+    }
+    if (T > blocks.length) {
+      warnings.push('隊數（' + T + '）多過可以獨立分嘅組數（' + blocks.length + '），會有空隊');
+    }
+
+    var ctx = { T: T, blocks: blocks, blockWeight: blockWeight, blockMembers: blockMembers, blockOf: blockOf, cannot: cannot, people: people, balance: balance };
+    var rng = makeRng(seed);
+    var best = null, bestTeamOf = null;
+
+    for (var r = 0; r < restarts; r++) {
+      // --- seed assignment ---
+      var order = blocks.map(function (_, i) { return i; });
+      if (r === 0) {
+        order.sort(function (a, b) { return blockWeight[b] - blockWeight[a]; });
+      } else {
+        for (var k = order.length - 1; k > 0; k--) { var j = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[j]; order[j] = tmp; }
+      }
+      var teamOf = new Array(blocks.length).fill(-1);
+      var loads = new Array(T).fill(0);
+      order.forEach(function (b) {
+        var pick = 0;
+        if (r === 0 && balance) {
+          for (var t = 1; t < T; t++) if (loads[t] < loads[pick] - 1e-9) pick = t;
+        } else {
+          pick = Math.floor(rng() * T);
+        }
+        teamOf[b] = pick; loads[pick] += blockWeight[b];
+      });
+
+      var cur = costOf(ctx, teamOf);
+      var localBest = cur.score, localTeamOf = teamOf.slice();
+
+      for (var it = 0; it < iterations; it++) {
+        var cand = teamOf.slice();
+        if (blocks.length > 1 && rng() < 0.65) {
+          var b1 = Math.floor(rng() * blocks.length);
+          var b2 = Math.floor(rng() * blocks.length);
+          if (b1 === b2 || cand[b1] === cand[b2]) { continue; }
+          var tt = cand[b1]; cand[b1] = cand[b2]; cand[b2] = tt;
+        } else {
+          var bm = Math.floor(rng() * blocks.length);
+          if (T < 2) continue;
+          var nt = Math.floor(rng() * T);
+          if (cand[bm] === nt) { continue; }
+          cand[bm] = nt;
+        }
+        var c = costOf(ctx, cand);
+        if (c.score <= cur.score) { teamOf = cand; cur = c; }
+        if (c.score < localBest) { localBest = c.score; localTeamOf = cand.slice(); }
+      }
+      var finalCost = costOf(ctx, localTeamOf);
+      if (!best || finalCost.score < best.score) { best = finalCost; bestTeamOf = localTeamOf.slice(); }
+      if (best.conflictScore === 0 && best.imbalance < 1e-6) break;
+    }
+
+    var teams = [];
+    for (var t2 = 0; t2 < T; t2++) teams.push({ id: t2, members: [], weight: 0 });
+    blocks.forEach(function (_, b) {
+      var t3 = bestTeamOf[b];
+      if (t3 < 0 || t3 >= T) t3 = 0;
+      blocks[b].forEach(function (pi) {
+        teams[t3].members.push({ name: people[pi].name, weight: people[pi].weight });
+      });
+      teams[t3].weight += blockWeight[b];
+    });
+    teams.forEach(function (tm) {
+      tm.members.sort(function (a, b) { return b.weight - a.weight || (a.name < b.name ? -1 : 1); });
+      tm.count = tm.members.length;
+      tm.weight = Math.round(tm.weight * 100) / 100;
+    });
+
+    if (best.violations.length) {
+      warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然同隊（規則太多／衝突，冇完美解）');
+    }
+
+    return {
+      teams: teams,
+      violations: best.violations,
+      conflicts: conflicts,
+      warnings: warnings,
+      imbalance: Math.round(best.imbalance * 100) / 100,
+      ok: best.violations.length === 0 && conflicts.length === 0
+    };
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, makeRng: makeRng };
+});
+
+</script>
+<script>
+const $ = id => document.getElementById(id);
+const LS = 'teamMaker.v1';
+const els = {
+  people:$('people'), cannot:$('cannot'), must:$('must'), teams:$('teams'), seed:$('seed'),
+  balance:$('balance'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
+  results:$('results'), status:$('status')
+};
+const LETTERS = 'ABCDEFGHIJKLMNOP';
+
+/* ---------- persistence ---------- */
+function save(){
+  try{
+    localStorage.setItem(LS, JSON.stringify({
+      people:els.people.value, cannot:els.cannot.value, must:els.must.value,
+      teams:els.teams.value, seed:els.seed.value, balance:els.balance.checked
+    }));
+  }catch(e){}
+}
+function load(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS) || 'null'); if(!s) return;
+    els.people.value = s.people || ''; els.cannot.value = s.cannot || ''; els.must.value = s.must || '';
+    if(s.teams) els.teams.value = s.teams;
+    if(s.seed) els.seed.value = s.seed;
+    if(typeof s.balance === 'boolean') els.balance.checked = s.balance;
+  }catch(e){}
+}
+
+/* ---------- render ---------- */
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function render(res){
+  // status banner
+  if(res.warnings.length){
+    els.status.innerHTML = res.warnings.map(w => `<div class="warn">⚠️ ${esc(w)}</div>`).join('');
+  }else{
+    els.status.innerHTML = '';
+  }
+  const n = res.teams.reduce((s,t) => s + t.members.length, 0);
+  if(n){
+    const max = Math.max(...res.teams.map(t => t.weight)) || 1;
+    const head = res.ok
+      ? `<div class="good">✅ 全部規則滿足，${res.teams.length} 隊、${n} 人</div>`
+      : '';
+    els.status.insertAdjacentHTML('afterbegin', head);
+    els.results.innerHTML = res.teams.map((t,i) => `
+      <div class="team">
+        <h2>${LETTERS[i] || '#'+(i+1)} 隊 <em>${t.count} 人 · 總權重 ${t.weight}</em></h2>
+        <div class="bar"><i style="width:${Math.round(t.weight/max*100)}%"></i></div>
+        <ul class="members">
+          ${t.members.map(m => `<li>${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}</li>`).join('') || '<li style="color:var(--dim)">（空）</li>'}
+        </ul>
+      </div>`).join('');
+  }else{
+    els.results.innerHTML = '';
+    els.status.insertAdjacentHTML('afterbegin', `<div class="warn">名單係空嘅 — 先輸入名字。</div>`);
+  }
+}
+
+/* ---------- run ---------- */
+function run(newSeed){
+  const parsed = TeamSolver.parsePeople(els.people.value);
+  const cannot = TeamSolver.parsePairs(els.cannot.value);
+  const must = TeamSolver.parsePairs(els.must.value);
+  let seed = parseInt(els.seed.value, 10);
+  if(newSeed || !seed){ seed = Math.floor(Math.random() * 999999) + 1; els.seed.value = seed; }
+  const t0 = performance.now();
+  const res = TeamSolver.solve({
+    people: parsed.people,
+    teams: parseInt(els.teams.value, 10) || 2,
+    cannotPairs: cannot.pairs,
+    mustPairs: must.pairs,
+    balance: els.balance.checked,
+    seed: seed,
+    iterations: 6000,
+    restarts: 12
+  });
+  res.warnings = parsed.warnings.concat(cannot.warnings, must.warnings, res.warnings);
+  const ms = Math.round(performance.now() - t0);
+  if(res.teams.length) res.warnings.push(`（用 ${ms}ms 搜完，seed ${seed}）`);
+  render(res);
+  window.__last = res;
+  save();
+}
+
+els.go.addEventListener('click', () => run(false));
+els.reroll.addEventListener('click', () => run(true));
+[els.people, els.cannot, els.must, els.teams, els.seed, els.balance].forEach(el => {
+  el.addEventListener('input', save); el.addEventListener('change', save);
+});
+els.copy.addEventListener('click', async () => {
+  const res = window.__last; if(!res) return;
+  const txt = res.teams.map((t,i) =>
+    `${LETTERS[i] || '#'+(i+1)} 隊（${t.count} 人 · 總權重 ${t.weight}）\n` +
+    t.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}`).join('\n')
+  ).join('\n\n');
+  try{ await navigator.clipboard.writeText(txt); els.go.textContent = '已複製 ✓'; setTimeout(()=>els.go.textContent='分隊！', 1200); }
+  catch(e){ els.status.insertAdjacentHTML('afterbegin', '<div class="warn">複製失敗，長按結果自己複製</div>'); }
+});
+els.demo.addEventListener('click', () => {
+  els.people.value = '陳大文 3\n李小明 2\n黃小美 3\n張三 1\n王五 2\n趙六 3\n錢七 1\n孫八 2\n周九 3\n吳十 1\n鄭一 2\n馮二 3';
+  els.cannot.value = '陳大文 ! 李小明\n黃小美 ! 趙六\n張三 ! 孫八';
+  els.must.value = '李小明 + 王五';
+  els.teams.value = 3;
+  run(true);
+});
+
+load();
+if(!els.people.value) els.status.innerHTML = '<div class="hint">輸入名單（同規則）再撳「分隊」。想睇效果可以撳「載入示範」。</div>';
+</script>
+</body>
+</html>
