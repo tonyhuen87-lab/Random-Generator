@@ -1,8 +1,12 @@
 /* Team Maker — pure solver (no DOM).
    Works in the browser (window.TeamSolver) and in Node (module.exports).
-   Goal: split a weighted list into T teams while (a) never putting a
-   "cannot be together" pair in the same team, (b) keeping "must be together"
-   pairs in the same team, and (c) balancing total weight per team. */
+
+   Splits a weighted list into T teams while:
+     (a) never putting a "cannot be together" pair in the same team,
+     (b) keeping "must be together" pairs in the same team,
+     (c) balancing total weight per team,
+     (d) letting some people be "repeatable": in every team, or in up to N teams.
+*/
 (function (root, factory) {
   var api = factory();
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -44,7 +48,6 @@
       if (weight > 100) { weight = 100; }
       out.push({ name: name, weight: weight, line: i + 1 });
     });
-    // de-dupe by name (keep first)
     var seen = Object.create(null), dedup = [];
     out.forEach(function (p) {
       var k = p.name.toLowerCase();
@@ -55,8 +58,7 @@
   }
 
   // "A ! B" -> [A, B]. Separators: ! ！ + × , ， / | 、 -> → 與 同 和
-  // NOTE: a bare "x" is deliberately NOT a separator — names like "x" or "Max"
-  // must survive. Use "×" (multiplication sign) instead.
+  // NOTE: a bare "x" is deliberately NOT a separator — names like "x" or "Max" must survive.
   function splitPair(line) {
     return line.split(/\s*(?:!|！|\+|×|,|，|\/|\||、|->|→|與|同|和)\s*/i)
       .map(function (s) { return s.trim(); })
@@ -71,7 +73,6 @@
       if (parts.length === 2) {
         pairs.push([parts[0], parts[1]]);
       } else if (parts.length > 2) {
-        // treat as a chain: A,B,C -> A-B, B-C, A-C
         for (var i = 0; i < parts.length; i++) {
           for (var j = i + 1; j < parts.length; j++) pairs.push([parts[i], parts[j]]);
         }
@@ -83,10 +84,25 @@
     return { pairs: pairs, warnings: warnings };
   }
 
-  /* ---------- union-find for "must be together" ---------- */
-  function DSU(n) {
-    this.p = []; for (var i = 0; i < n; i++) this.p.push(i);
+  /* Repeatable people: "Name" = in EVERY team; "Name 2" / "Name x2" / "Name 最多2" = up to 2 teams. */
+  function parseRepeat(text) {
+    var items = [], warnings = [];
+    String(text || '').split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line || line.charAt(0) === '#') return;
+      var name = line, teams = 0; // 0 = every team
+      var m = line.match(/^(.*?)[\s]*(?:x|×|\*|=|max|最多|可|每)\s*(\d+)\s*$/i)
+           || line.match(/^(.*?)\s+(\d+)\s*$/);
+      if (m && m[1].trim()) { name = m[1].trim(); teams = parseInt(m[2], 10); }
+      if (!name) { warnings.push('「' + line + '」冇名字，已略過'); return; }
+      if (teams === 1) { warnings.push('「' + name + '」寫咗 1 隊，即係唔會重複，已當普通成員'); }
+      items.push({ name: name, teams: teams > 1 ? teams : 0 });
+    });
+    return { items: items, warnings: warnings };
   }
+
+  /* ---------- union-find ---------- */
+  function DSU(n) { this.p = []; for (var i = 0; i < n; i++) this.p.push(i); }
   DSU.prototype.find = function (x) {
     while (this.p[x] !== x) { this.p[x] = this.p[this.p[x]]; x = this.p[x]; }
     return x;
@@ -95,34 +111,6 @@
     a = this.find(a); b = this.find(b);
     if (a !== b) this.p[b] = a;
   };
-
-  /* ---------- cost ---------- */
-  function costOf(ctx, teamOf) {
-    var loads = new Array(ctx.T).fill(0), counts = new Array(ctx.T).fill(0);
-    var conflictScore = 0, violations = [];
-    var i;
-    for (i = 0; i < ctx.blocks.length; i++) {
-      var t = teamOf[i], load = ctx.blockWeight[i];
-      if (t >= 0 && t < ctx.T) { loads[t] += load; counts[t] += ctx.blockMembers[i].length; }
-    }
-    for (i = 0; i < ctx.cannot.length; i++) {
-      var pair = ctx.cannot[i];
-      if (teamOf[ctx.blockOf[pair[0]]] === teamOf[ctx.blockOf[pair[1]]]) {
-        conflictScore += 1;
-        violations.push({ a: ctx.people[pair[0]].name, b: ctx.people[pair[1]].name });
-      }
-    }
-    var imbalance = 0;
-    if (ctx.balance) {
-      var mean = loads.reduce(function (s, v) { return s + v; }, 0) / ctx.T;
-      for (i = 0; i < ctx.T; i++) { var d = loads[i] - mean; imbalance += d * d; }
-      imbalance = imbalance / ctx.T;
-      // small nudge so team sizes stay close too
-      var cmean = counts.reduce(function (s, v) { return s + v; }, 0) / ctx.T;
-      for (i = 0; i < ctx.T; i++) { var dc = counts[i] - cmean; imbalance += dc * dc * 0.01; }
-    }
-    return { score: conflictScore * 1e6 + imbalance, conflictScore: conflictScore, imbalance: imbalance, loads: loads, counts: counts, violations: violations };
-  }
 
   /* ---------- solve ---------- */
   function solve(opts) {
@@ -138,31 +126,112 @@
     var index = Object.create(null);
     people.forEach(function (p, i) { index[p.name.toLowerCase()] = i; });
 
-    function resolvePairs(pairs, label) {
-      var out = [];
+    if (people.length === 0) {
+      return { teams: [], violations: [], conflicts: [], warnings: ['名單係空嘅'], ok: false };
+    }
+
+    /* ---- split repeatable people out of the core ---- */
+    var repeatOf = Object.create(null);   // lowercased name -> {max}   (max 0 = every team)
+    var repeatList = [];                  // ordered repeat names
+    (opts.repeat || []).forEach(function (spec) {
+      var key = String(spec.name).toLowerCase();
+      if (index[key] === undefined) {
+        warnings.push('「' + spec.name + '」設定咗可重複，但唔喺名單，已略過');
+        return;
+      }
+      var max = parseInt(spec.teams, 10) || 0;
+      if (max > T) max = 0;               // asking for more teams than exist = every team
+      if (max === 1) max = 0;
+      if (repeatOf[key] === undefined) repeatList.push(key);
+      repeatOf[key] = { max: max, name: people[index[key]].name, weight: people[index[key]].weight };
+    });
+
+    var core = [], coreByName = Object.create(null);
+    people.forEach(function (p) {
+      if (repeatOf[p.name.toLowerCase()] === undefined) {
+        coreByName[p.name.toLowerCase()] = core.length;
+        core.push(p);
+      }
+    });
+    repeatList.forEach(function (k) {
+      if (core.length === 0) warnings.push('得返可重複嘅人，冇普通成員可分');
+    });
+
+    /* ---- resolve rules ---- */
+    var cannotCore = [], repeatForbid = Object.create(null);
+    function forbid(repKey, other) {
+      var f = repeatForbid[repKey] || (repeatForbid[repKey] = { core: {}, rep: {} });
+      if (other.core !== undefined) f.core[other.core] = 1;
+      if (other.rep !== undefined) f.rep[other.rep] = 1;
+    }
+
+    function resolveCannot(pairs) {
       pairs.forEach(function (pr) {
-        var ia = index[pr[0].toLowerCase()], ib = index[pr[1].toLowerCase()];
+        var ka = pr[0].toLowerCase(), kb = pr[1].toLowerCase();
+        var ra = repeatOf[ka], rb = repeatOf[kb];
+        if (ra || rb) {
+          if (ra && ra.max === 0) {
+            warnings.push('「' + ra.name + '」每隊都有，所以同「' + pr[1] + '」係冇可能唔同隊 → 已略過呢條規則');
+            return;
+          }
+          if (rb && rb.max === 0) {
+            warnings.push('「' + rb.name + '」每隊都有，所以同「' + pr[0] + '」係冇可能唔同隊 → 已略過呢條規則');
+            return;
+          }
+          if (ra && rb) { forbid(ka, { rep: kb }); forbid(kb, { rep: ka }); return; }
+          if (ra && coreByName[kb] !== undefined) { forbid(ka, { core: coreByName[kb] }); return; }
+          if (rb && coreByName[ka] !== undefined) { forbid(kb, { core: coreByName[ka] }); return; }
+          return; // repeats only, no core side -> nothing to enforce
+        }
+        var ia = coreByName[ka], ib = coreByName[kb];
         if (ia === undefined || ib === undefined) {
-          warnings.push(label + '「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
+          warnings.push('唔可以同隊「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
           return;
         }
-        if (ia === ib) return;
-        out.push([ia, ib]);
+        if (ia !== ib) cannotCore.push([ia, ib]);
+      });
+    }
+    function resolveMust(pairs) {
+      var out = [];
+      pairs.forEach(function (pr) {
+        var ka = pr[0].toLowerCase(), kb = pr[1].toLowerCase();
+        var ra = repeatOf[ka], rb = repeatOf[kb];
+        if (ra || rb) {
+          warnings.push('「' + pr[0] + ' / ' + pr[1] + '」涉及可重複嘅人，唔支援「必須同隊」，已略過');
+          return;
+        }
+        var ia = coreByName[ka], ib = coreByName[kb];
+        if (ia === undefined || ib === undefined) {
+          warnings.push('必須同隊「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
+          return;
+        }
+        if (ia !== ib) out.push([ia, ib]);
       });
       return out;
     }
-    var cannot = resolvePairs(opts.cannotPairs || [], '唔可以同隊');
-    var must = resolvePairs(opts.mustPairs || [], '必須同隊');
+    var mustPairs = resolveMust(opts.mustPairs || []);
+    resolveCannot(opts.cannotPairs || []);
 
-    if (people.length === 0) {
-      return { teams: [], violations: [], warnings: ['名單係空嘅'], conflicts: [], ok: false };
+    if (core.length === 0) {
+      var emptyTeams = [];
+      for (var e = 0; e < T; e++) emptyTeams.push({ id: e, members: [], count: 0, weight: 0 });
+      repeatEntryTeams(repeatList, repeatOf, T).forEach(function (entry) {
+        entry.teamIds.forEach(function (t) {
+          emptyTeams[t].members.push({ name: entry.name, weight: entry.weight, repeat: entry.label });
+        });
+      });
+      emptyTeams.forEach(function (tm) {
+        tm.count = tm.members.length;
+        tm.weight = Math.round(tm.members.reduce(function (s, m) { return s + m.weight; }, 0) * 100) / 100;
+      });
+      return { teams: emptyTeams, violations: [], conflicts: [], warnings: warnings, imbalance: 0, ok: true };
     }
 
-    var dsu = new DSU(people.length);
-    must.forEach(function (p) { dsu.union(p[0], p[1]); });
-
+    /* ---- blocks: must-be-together groups ---- */
+    var dsu = new DSU(core.length);
+    mustPairs.forEach(function (p) { dsu.union(p[0], p[1]); });
     var blockIndexOf = Object.create(null), blocks = [], blockWeight = [], blockMembers = [];
-    people.forEach(function (p, i) {
+    core.forEach(function (p, i) {
       var r = dsu.find(i);
       if (blockIndexOf[r] === undefined) {
         blockIndexOf[r] = blocks.length;
@@ -171,13 +240,12 @@
       var b = blockIndexOf[r];
       blocks[b].push(i); blockWeight[b] += p.weight; blockMembers[b].push(p.name);
     });
-    var blockOf = people.map(function (_, i) { return blockIndexOf[dsu.find(i)]; });
+    var blockOf = core.map(function (_, i) { return blockIndexOf[dsu.find(i)]; });
 
-    // contradictions: a cannot-pair that is also must-be-together
     var conflicts = [];
-    cannot.forEach(function (p) {
+    cannotCore.forEach(function (p) {
       if (blockOf[p[0]] === blockOf[p[1]]) {
-        conflicts.push({ a: people[p[0]].name, b: people[p[1]].name });
+        conflicts.push({ a: core[p[0]].name, b: core[p[1]].name });
       }
     });
     if (conflicts.length) {
@@ -187,78 +255,158 @@
       warnings.push('隊數（' + T + '）多過可以獨立分嘅組數（' + blocks.length + '），會有空隊');
     }
 
-    var ctx = { T: T, blocks: blocks, blockWeight: blockWeight, blockMembers: blockMembers, blockOf: blockOf, cannot: cannot, people: people, balance: balance };
+    var maxRepeat = 0;
+    repeatList.forEach(function (k) { var m = repeatOf[k].max; if (m > maxRepeat) maxRepeat = m; });
+
+    /* ---- cost ---- */
+    function costOf(teamOf, repTeams) {
+      var loads = new Array(T).fill(0), counts = new Array(T).fill(0);
+      var i, t;
+      for (i = 0; i < blocks.length; i++) {
+        t = teamOf[i];
+        if (t >= 0 && t < T) { loads[t] += blockWeight[i]; counts[t] += blockMembers[i].length; }
+      }
+      // repeat people that are limited to N teams: they add real load
+      for (i = 0; i < repeatList.length; i++) {
+        var spec = repeatOf[repeatList[i]];
+        var w = spec.weight, n = spec.max;
+        if (n > 0) {
+          repTeams[i].forEach(function (tt) { loads[tt] += w; counts[tt] += 1; });
+        }
+      }
+      var violations = [];
+      for (i = 0; i < cannotCore.length; i++) {
+        var pr = cannotCore[i];
+        if (teamOf[blockOf[pr[0]]] === teamOf[blockOf[pr[1]]]) {
+          violations.push({ a: core[pr[0]].name, b: core[pr[1]].name });
+        }
+      }
+      for (i = 0; i < repeatList.length; i++) {
+        var key = repeatList[i], f = repeatForbid[key];
+        if (!f) continue;
+        var mine = repeatOf[key].max === 0
+          ? allTeams(T)
+          : repTeams[i];
+        var mineSet = Object.create(null); mine.forEach(function (x) { mineSet[x] = 1; });
+        Object.keys(f.core).forEach(function (ci) {
+          var bt = teamOf[blockOf[ci]];
+          if (mineSet[bt]) violations.push({ a: repeatOf[key].name, b: core[ci].name });
+        });
+        Object.keys(f.rep).forEach(function (rk) {
+          var j = repeatList.indexOf(rk);
+          var other = repeatOf[rk].max === 0 ? allTeams(T) : repTeams[j];
+          if (other.some(function (x) { return mineSet[x]; })) {
+            violations.push({ a: repeatOf[key].name, b: repeatOf[rk].name });
+          }
+        });
+      }
+      var imbalance = 0;
+      if (balance) {
+        var mean = loads.reduce(function (s, v) { return s + v; }, 0) / T;
+        for (t = 0; t < T; t++) { var d = loads[t] - mean; imbalance += d * d; }
+        imbalance = imbalance / T;
+        var cmean = counts.reduce(function (s, v) { return s + v; }, 0) / T;
+        for (t = 0; t < T; t++) { var dc = counts[t] - cmean; imbalance += dc * dc * 0.01; }
+      }
+      return { score: violations.length * 1e6 + imbalance, imbalance: imbalance, loads: loads, counts: counts, violations: violations };
+    }
+
     var rng = makeRng(seed);
-    var best = null, bestTeamOf = null;
+    var best = null, bestTeamOf = null, bestRepTeams = null;
 
     for (var r = 0; r < restarts; r++) {
-      // --- seed assignment ---
       var order = blocks.map(function (_, i) { return i; });
-      if (r === 0) {
-        order.sort(function (a, b) { return blockWeight[b] - blockWeight[a]; });
-      } else {
-        for (var k = order.length - 1; k > 0; k--) { var j = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[j]; order[j] = tmp; }
-      }
-      var teamOf = new Array(blocks.length).fill(-1);
-      var loads = new Array(T).fill(0);
+      if (r === 0) order.sort(function (a, b) { return blockWeight[b] - blockWeight[a]; });
+      else for (var k = order.length - 1; k > 0; k--) { var j = Math.floor(rng() * (k + 1)); var tmp = order[k]; order[k] = order[j]; order[j] = tmp; }
+
+      var teamOf = new Array(blocks.length).fill(-1), loads = new Array(T).fill(0);
       order.forEach(function (b) {
         var pick = 0;
-        if (r === 0 && balance) {
-          for (var t = 1; t < T; t++) if (loads[t] < loads[pick] - 1e-9) pick = t;
-        } else {
-          pick = Math.floor(rng() * T);
-        }
+        if (r === 0 && balance) { for (var t = 1; t < T; t++) if (loads[t] < loads[pick] - 1e-9) pick = t; }
+        else pick = Math.floor(rng() * T);
         teamOf[b] = pick; loads[pick] += blockWeight[b];
       });
 
-      var cur = costOf(ctx, teamOf);
-      var localBest = cur.score, localTeamOf = teamOf.slice();
+      // seed the limited-repeat people onto the lightest teams
+      var repTeams = repeatList.map(function (key) {
+        var n = repeatOf[key].max;
+        if (n === 0) return [];
+        var ranked = allTeams(T).sort(function (a, b) { return loads[a] - loads[b]; }).slice(0, n);
+        ranked.forEach(function (t) { loads[t] += repeatOf[key].weight; });
+        return ranked.sort(function (a, b) { return a - b; });
+      });
+
+      var cur = costOf(teamOf, repTeams);
+      var localBest = cur.score, localTeamOf = teamOf.slice(), localRep = repTeams.map(function (a) { return a.slice(); });
 
       for (var it = 0; it < iterations; it++) {
-        var cand = teamOf.slice();
-        if (blocks.length > 1 && rng() < 0.65) {
-          var b1 = Math.floor(rng() * blocks.length);
-          var b2 = Math.floor(rng() * blocks.length);
-          if (b1 === b2 || cand[b1] === cand[b2]) { continue; }
+        var cand = teamOf.slice(), candRep = repTeams.map(function (a) { return a.slice(); });
+        var roll = rng();
+        if (maxRepeat > 0 && roll < 0.25) {
+          // move a limited-repeat person to a different team
+          var idxs = [];
+          repeatList.forEach(function (kk, ii) { if (repeatOf[kk].max > 0) idxs.push(ii); });
+          if (!idxs.length) continue;
+          var ri = idxs[Math.floor(rng() * idxs.length)];
+          var set = candRep[ri];
+          var free = allTeams(T).filter(function (t) { return set.indexOf(t) === -1; });
+          if (!free.length) continue;
+          var to = free[Math.floor(rng() * free.length)];
+          var drop = Math.floor(rng() * set.length);
+          set[drop] = to;
+          set.sort(function (a, b) { return a - b; });
+        } else if (blocks.length > 1 && roll < 0.75) {
+          var b1 = Math.floor(rng() * blocks.length), b2 = Math.floor(rng() * blocks.length);
+          if (b1 === b2 || cand[b1] === cand[b2]) continue;
           var tt = cand[b1]; cand[b1] = cand[b2]; cand[b2] = tt;
         } else {
-          var bm = Math.floor(rng() * blocks.length);
           if (T < 2) continue;
-          var nt = Math.floor(rng() * T);
-          if (cand[bm] === nt) { continue; }
+          var bm = Math.floor(rng() * blocks.length), nt = Math.floor(rng() * T);
+          if (cand[bm] === nt) continue;
           cand[bm] = nt;
         }
-        var c = costOf(ctx, cand);
-        if (c.score <= cur.score) { teamOf = cand; cur = c; }
-        if (c.score < localBest) { localBest = c.score; localTeamOf = cand.slice(); }
+        var c = costOf(cand, candRep);
+        if (c.score <= cur.score) { teamOf = cand; repTeams = candRep; cur = c; }
+        if (c.score < localBest) { localBest = c.score; localTeamOf = cand.slice(); localRep = candRep.map(function (a) { return a.slice(); }); }
       }
-      var finalCost = costOf(ctx, localTeamOf);
-      if (!best || finalCost.score < best.score) { best = finalCost; bestTeamOf = localTeamOf.slice(); }
-      if (best.conflictScore === 0 && best.imbalance < 1e-6) break;
+      var finalCost = costOf(localTeamOf, localRep);
+      if (!best || finalCost.score < best.score) { best = finalCost; bestTeamOf = localTeamOf.slice(); bestRepTeams = localRep; }
+      if (best.violations.length === 0 && best.imbalance < 1e-6) break;
     }
 
+    /* ---- build output ---- */
     var teams = [];
     for (var t2 = 0; t2 < T; t2++) teams.push({ id: t2, members: [], weight: 0 });
     blocks.forEach(function (_, b) {
       var t3 = bestTeamOf[b];
       if (t3 < 0 || t3 >= T) t3 = 0;
-      blocks[b].forEach(function (pi) {
-        teams[t3].members.push({ name: people[pi].name, weight: people[pi].weight });
+      blocks[b].forEach(function (pi) { teams[t3].members.push({ name: core[pi].name, weight: core[pi].weight }); });
+    });
+    repeatList.forEach(function (key, i) {
+      var spec = repeatOf[key];
+      var ids = spec.max === 0 ? allTeams(T) : bestRepTeams[i];
+      ids.forEach(function (t4) {
+        teams[t4].members.push({ name: spec.name, weight: spec.weight, repeat: spec.max === 0 ? 'all' : spec.max });
       });
-      teams[t3].weight += blockWeight[b];
     });
     teams.forEach(function (tm) {
-      tm.members.sort(function (a, b) { return b.weight - a.weight || (a.name < b.name ? -1 : 1); });
+      tm.members.sort(function (a, b) { return (b.repeat ? 1 : 0) - (a.repeat ? 1 : 0) || b.weight - a.weight || (a.name < b.name ? -1 : 1); });
       tm.count = tm.members.length;
-      tm.weight = Math.round(tm.weight * 100) / 100;
+      tm.weight = Math.round(tm.members.reduce(function (s, m) { return s + m.weight; }, 0) * 100) / 100;
+    });
+
+    var repeats = repeatList.map(function (key) {
+      var spec = repeatOf[key];
+      return { name: spec.name, teams: spec.max === 0 ? T : spec.max, every: spec.max === 0 };
     });
 
     if (best.violations.length) {
-      warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然同隊（規則太多／衝突，冇完美解）');
+      warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然有重疊（規則太多／衝突，冇完美解）');
     }
 
     return {
       teams: teams,
+      repeats: repeats,
       violations: best.violations,
       conflicts: conflicts,
       warnings: warnings,
@@ -267,5 +415,15 @@
     };
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, makeRng: makeRng };
+  function allTeams(T) { var a = []; for (var i = 0; i < T; i++) a.push(i); return a; }
+
+  // repeatable people that are in EVERY team (used when there is no core list)
+  function repeatEntryTeams(repeatList, repeatOf, T) {
+    return repeatList.map(function (k) {
+      var s = repeatOf[k];
+      return { name: s.name, weight: s.weight, teams: s.max === 0 ? T : s.max, label: s.max === 0 ? 'all' : s.max, teamIds: allTeams(T) };
+    });
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng };
 });

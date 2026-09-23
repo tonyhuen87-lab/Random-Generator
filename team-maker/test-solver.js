@@ -122,5 +122,46 @@ console.log('\n[8] stress: 40 people, 8 cannot-pairs, 4 teams');
   console.log('     40p/4 teams:', JSON.stringify(w), 'spread', spread, ms + 'ms');
 }
 
+console.log('\n[9] repeatable members (跨隊重複)');
+{
+  const people = S.parsePeople('A 3\nB 2\nC 3\nD 1\nE 2\nF 3\n教練 2\n助手 1').people;
+  const rep = S.parseRepeat('教練\n助手 2').items;
+  check('parseRepeat: plain name = every team', rep[0].teams === 0, rep);
+  check('parseRepeat: "助手 2" = max 2', rep[1].teams === 2, rep);
+
+  const res = S.solve({ people, teams: 3, repeat: rep, seed: 11 });
+  const teamsOf = n => res.teams.map((t, i) => t.members.some(m => m.name === n) ? i : -1).filter(i => i >= 0);
+  check('coach appears in all 3 teams', teamsOf('教練').length === 3, teamsOf('教練'));
+  check('assistant in 1–2 teams', teamsOf('助手').length >= 1 && teamsOf('助手').length <= 2, teamsOf('助手'));
+  check('everyone else appears exactly once', ['A', 'B', 'C', 'D', 'E', 'F'].every(n => teamsOf(n).length === 1),
+    ['A', 'B', 'C', 'D', 'E', 'F'].map(n => n + ':' + teamsOf(n).length));
+  check('no rule violations', res.violations.length === 0, res.violations);
+  check('repeats summary reported', !!res.repeats && res.repeats.length === 2 && res.repeats[0].every === true, res.repeats);
+  const uniq = res.teams.map(t => t.members.filter(m => !m.repeat).reduce((s, m) => s + m.weight, 0));
+  const spread = Math.max(...uniq) - Math.min(...uniq);
+  check('core members balanced despite repeats (spread <= 3)', spread <= 3, { uniq, spread });
+  console.log('     weights per team:', JSON.stringify(res.teams.map(t => t.weight)), 'core-only:', JSON.stringify(uniq));
+}
+
+console.log('\n[10] repeat + rule edge cases');
+{
+  const people = S.parsePeople('X\nY\nZ\nHelper').people;
+  const res = S.solve({
+    people, teams: 2, repeat: S.parseRepeat('Helper').items,
+    cannotPairs: S.parsePairs('Helper ! X\nX ! Y').pairs,
+    mustPairs: S.parsePairs('Helper + Z').pairs, seed: 4
+  });
+  check('drops cannot-rule against an every-team member', res.warnings.some(w => w.includes('每隊都有')), res.warnings);
+  check('drops must-pair involving a repeat member', res.warnings.some(w => w.includes('必須同隊')), res.warnings);
+  const tOf = n => res.teams.findIndex(t => t.members.some(m => m.name === n));
+  check('Helper is in both teams', res.teams.every(t => t.members.some(m => m.name === 'Helper')));
+  check('remaining hard rule still enforced (X != Y)', tOf('X') !== tOf('Y'), [tOf('X'), tOf('Y')]);
+
+  const bad = S.solve({ people, teams: 2, repeat: S.parseRepeat('Nobody').items, seed: 1 });
+  check('unknown repeat name warned', bad.warnings.some(w => w.includes('唔喺名單')), bad.warnings);
+  const maxed = S.solve({ people, teams: 2, repeat: S.parseRepeat('Helper 9').items, seed: 1 });
+  check('max > team count becomes every team', maxed.teams.every(t => t.members.some(m => m.name === 'Helper')));
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);
