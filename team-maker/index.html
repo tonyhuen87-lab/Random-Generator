@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Teams">
 <meta name="theme-color" content="#0b0f14">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Teams · 分隊</title>
 <style>
   :root{
@@ -150,7 +153,7 @@ const els = {
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v6';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v8';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -192,9 +195,11 @@ const DICT = {
     copied:'已複製 ✓', copyFail:'複製失敗，長按結果自己複製',
     idle:'輸入名單（同規則）再撳「分隊」。想睇效果可以撳「載入示範」。',
     sizeMaxBlank:'「最多」留空 → 已當同「最少」一樣（每隊 {n} 人）；想隨機請把「最多」填大啲',
-    sizeMaxTooSmall:'「最多」細過「最少」→ 已當 {n} 人',
+    sizeMaxTooSmall:'「最少」大過「最多」→ 已把「最少」降到 {n}（以「最多」為準，保證唔會超）',
     sizeMinEqMax:'最少＝最多 → 每隊固定 {n} 人（想隨機就加大「最多」）',
-    pickedCopied:'已複製揀嘅隊 ✓'
+    pickedCopied:'已複製揀嘅隊 ✓',
+    autoGrew:'唔夠位 → 已自動加至 {n} 隊（每隊最多 {cap} 人）',
+    capHard:'每隊最多 {cap} 人（硬性）'
   },
   en: {
     title:'Teams',
@@ -234,9 +239,11 @@ const DICT = {
     copied:'Copied ✓', copyFail:'Copy failed — long-press the result to copy',
     idle:'Enter a list (plus any rules), then press “Build teams!”. Try “Load demo” to see it work.',
     sizeMaxBlank:'“Max” was left blank → treated as the same as “Min” ({n} per team). Set a larger “Max” to randomise',
-    sizeMaxTooSmall:'“Max” was smaller than “Min” → using {n}',
+    sizeMaxTooSmall:'“Min” was above “Max” → “Min” lowered to {n} (the Max always wins)',
     sizeMinEqMax:'Min = Max → every team gets exactly {n} (raise “Max” to randomise)',
-    pickedCopied:'Picked team copied ✓'
+    pickedCopied:'Picked team copied ✓',
+    autoGrew:'Not enough seats → auto-raised to {n} teams (max {cap} per team)',
+    capHard:'max {cap} per team (hard limit)'
   }
 };
 let LANG = 'zh';
@@ -352,7 +359,16 @@ function run(newSeed, keepChosen){
   const sizeMax = randomSizes ? range.max : 0;
   let teamCount = parseInt(els.teams.value, 10) || 0;
   const autoTeamCount = !teamCount;
-  if(!teamCount) teamCount = TeamSolver.autoTeams(parsed.people.length, sizeMax || maxPer);
+  const perTeamCap = randomSizes ? range.max : maxPer;
+  let grewFrom = 0;
+  if(!teamCount){
+    teamCount = TeamSolver.autoTeams(parsed.people.length, perTeamCap);
+  }else if(perTeamCap > 0){
+    // A per-team limit is a hard constraint: if the pinned team count cannot hold
+    // everybody, add teams instead of silently stuffing 10 people into a 5-seat team.
+    const fit = TeamSolver.teamsNeeded(parsed.people.length, perTeamCap);
+    if(fit > teamCount){ grewFrom = teamCount; teamCount = fit; }
+  }
   let seed = parseInt(els.seed.value, 10);
   if(newSeed || !seed){ seed = Math.floor(Math.random() * 999999) + 1; els.seed.value = seed; }
   const t0 = performance.now();
@@ -373,9 +389,11 @@ function run(newSeed, keepChosen){
   });
   res.warnings = parsed.warnings.concat(cannot.warnings, must.warnings, rep.warnings, res.warnings);
   if(!els.people.value.trim()) res.warnings.unshift(t('emptyListNote'));
+  if(grewFrom) res.warnings.unshift(t('autoGrew', {n: teamCount, cap: perTeamCap}));
+  if(!randomSizes && perTeamCap > 0) res.warnings.unshift(t('capHard', {cap: perTeamCap}));
   if(randomSizes){
     if(range.note === 'blank') res.warnings.unshift(t('sizeMaxBlank', {n: range.max}));
-    else if(range.note === 'clamped') res.warnings.unshift(t('sizeMaxTooSmall', {n: range.max}));
+    else if(range.note === 'minLowered') res.warnings.unshift(t('sizeMaxTooSmall', {n: range.max}));
     if(range.fixed) res.warnings.unshift(t('sizeMinEqMax', {n: range.max}));
   }
   if(autoTeamCount && parsed.people.length) res.warnings.unshift(t('autoTeams', {n:teamCount}));

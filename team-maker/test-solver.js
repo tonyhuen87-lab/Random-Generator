@@ -302,11 +302,20 @@ console.log('\n[17] min/max range must never invent a number (bug fix)');
   const b = S.normalizeRange(1, 10);
   check('1–10 stays a real range', b.min === 1 && b.max === 10 && b.note === null && b.fixed === false, b);
   const c = S.normalizeRange(5, 3);
-  check('max below min is clamped up', c.min === 5 && c.max === 5 && c.note === 'clamped', c);
+  check('min above max lowers the MIN (max always wins)', c.min === 3 && c.max === 3 && c.note === 'minLowered', c);
+  const c2 = S.normalizeRange(10, 5);
+  check('stale min 10 + max 5 → 5–5 (the v6 5→10 bug)', c2.min === 5 && c2.max === 5 && c2.note === 'minLowered', c2);
   const d = S.normalizeRange('', '');
   check('empty inputs → 1–1', d.min === 1 && d.max === 1, d);
   const e = S.normalizeRange(5, 5);
   check('equal min/max → fixed', e.fixed === true && e.max === 5, e);
+
+  // end-to-end: a stale min of 10 with max 5 must still cap every team at 5
+  const ppl = S.parsePeople(Array.from({ length: 12 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
+  const rg = S.normalizeRange(10, 5);
+  const r2 = S.solve({ people: ppl, teams: S.teamsNeeded(ppl.length, rg.max), sizeMin: rg.min, sizeMax: rg.max, seed: 9 });
+  check('12 people, min 10 / max 5 → every team ≤ 5', r2.teams.every(t => t.count <= 5), r2.teams.map(t => t.count));
+  check('caps all 5', r2.caps.every(c => c === 5), r2.caps);
 
   // end-to-end: min 5, blank max, 12 people → no team may exceed 5 (and not 10)
   const people = S.parsePeople(Array.from({ length: 12 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
@@ -330,6 +339,24 @@ console.log('\n[18] cap mode must ignore a leftover hidden "min" (second bug rep
   check('cap of 5 applies even with a stale sizeMin=10', res.caps.every(c => c === 5), res.caps);
   check('no team exceeds 5', res.teams.every(t => t.count <= 5), res.teams.map(t => t.count));
   check('no capacity warning (10 people fit in 3x5)', !res.warnings.some(w => w.includes('超出')), res.warnings);
+}
+
+console.log('\n[19] auto-grow teams so a hard cap can never be exceeded');
+{
+  check('teamsNeeded(12,5) = 3', S.teamsNeeded(12, 5) === 3, S.teamsNeeded(12, 5));
+  check('teamsNeeded(10,5) = 2', S.teamsNeeded(10, 5) === 2, S.teamsNeeded(10, 5));
+  check('teamsNeeded(0,5) = 1', S.teamsNeeded(0, 5) === 1, S.teamsNeeded(0, 5));
+  check('teamsNeeded(100,5) capped at 20', S.teamsNeeded(100, 5) === 20, S.teamsNeeded(100, 5));
+  check('teamsNeeded(n,0) = 0 (no cap requested)', S.teamsNeeded(10, 0) === 0, S.teamsNeeded(10, 0));
+
+  // the reported symptom: 20 people, cap 5 → nobody may end up in a 10-person team
+  const people = S.parsePeople(Array.from({ length: 20 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
+  const grown = S.teamsNeeded(people.length, 5);
+  const res = S.solve({ people, teams: grown, maxPerTeam: 5, seed: 6 });
+  check('auto-grown count is 4', grown === 4, grown);
+  check('every team ≤ 5 (no 10s)', res.teams.every(t => t.count <= 5), res.teams.map(t => t.count));
+  check('all 20 placed', res.teams.reduce((s, t) => s + t.count, 0) === 20);
+  check('no overflow warning needed', !res.warnings.some(w => w.includes('超出')), res.warnings);
 }
 
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');

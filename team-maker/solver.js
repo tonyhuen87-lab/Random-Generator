@@ -547,15 +547,17 @@
     });
   }
 
-  // Turn the two min/max inputs into a real range. Never invents a silent default:
-  // blank/0 max → same as min; max below min → clamped up to min.
+  // Turn the two min/max inputs into a real range. The MAX box is always authoritative:
+  // blank/0 max → same as min; min above max → the min is lowered (never raise the max).
   function normalizeRange(minInput, maxInput) {
     var mn = Math.max(1, parseInt(minInput, 10) || 1);
     var raw = parseInt(maxInput, 10) || 0;
-    var note = null;
-    if (raw <= 0) { note = 'blank'; }
-    else if (raw < mn) { note = 'clamped'; }
-    var mx = (raw > 0 && raw >= mn) ? raw : mn;
+    var mx, note = null;
+    if (raw <= 0) { mx = mn; note = 'blank'; }
+    else {
+      mx = raw;
+      if (mx < mn) { mn = mx; note = 'minLowered'; }
+    }
     return { min: mn, max: mx, note: note, fixed: mx === mn };
   }
 
@@ -565,5 +567,14 @@
     return (isFinite(n) && n > 0) ? n : 0;   // 0 = no limit
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap };
+  // How many teams are needed to hold `n` members at `perTeam` each? (0 = no limit → 0)
+  function teamsNeeded(n, perTeam) {
+    var cap = parseInt(perTeam, 10) || 0;
+    if (cap <= 0) return 0;
+    var people = parseInt(n, 10) || 0;
+    if (people <= 0) return 1;
+    return Math.max(1, Math.min(20, Math.ceil(people / cap)));
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded };
 });
