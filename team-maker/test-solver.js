@@ -479,5 +479,24 @@ console.log('\n[23] repeatable is optional by default (may repeat, NOT mandatory
   check('"name 2" still repeats into 2 teams', uptoCount === 2, uptoCount);
 }
 
+console.log('\n[24] "fill every empty seat" option');
+{
+  const people = S.parsePeople('A 1\nB 1\nC 1\nD 1\nHeavy 100').people;
+
+  const off = S.solve({ people, teams: 2, maxPerTeam: 3, optional: ['Heavy'], fillSeats: false, seed: 4 });
+  const on = S.solve({ people, teams: 2, maxPerTeam: 3, optional: ['Heavy'], fillSeats: true, seed: 4 });
+  check('OFF: a very heavy spare person can stay out (balance wins)', off.bench.length === 1, off.bench.map(b => b.name));
+  check('ON: everyone who fits gets a seat', on.bench.length === 0, on.bench.map(b => b.name));
+  check('ON still respects the caps', on.teams.every((t, i) => t.count <= on.caps[i]), on.teams.map((t, i) => t.count + '/' + on.caps[i]));
+
+  const ruled = S.solve({ people, teams: 2, maxPerTeam: 3, optional: ['Heavy'], cannotPairs: [['A', 'Heavy']], fillSeats: true, seed: 4 });
+  check('never breaks cannot-be-together while filling', ruled.violations.length === 0, ruled.violations);
+  const tOf = n => ruled.teams.findIndex(t => t.members.some(m => m.name === n));
+  check('and the forbidden pair never shares a team', tOf('Heavy') === -1 || tOf('Heavy') !== tOf('A'), [tOf('A'), tOf('Heavy')]);
+
+  const plenty = S.solve({ people, teams: 3, maxPerTeam: 5, optional: ['Heavy'], fillSeats: true, seed: 9 });
+  check('with spare seats nobody is left out', plenty.bench.length === 0, plenty.bench.length);
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

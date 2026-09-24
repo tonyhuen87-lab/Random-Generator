@@ -123,6 +123,7 @@
     <label class="switch"><input type="checkbox" id="balance" checked> <span data-i18n="lblBalance"></span></label>
     <label class="switch"><input type="checkbox" id="autoGrow" checked> <span data-i18n="lblAutoGrow"></span></label>
     <label class="switch"><input type="checkbox" id="randomPick"> <span data-i18n="lblRandomPick"></span></label>
+    <label class="switch"><input type="checkbox" id="fillSeats"> <span data-i18n="lblFillSeats"></span></label>
   </div>
   <div class="hint" data-i18n="hint"></div>
 </div>
@@ -328,6 +329,10 @@
     var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
     var balance = opts.balance !== false;
     var lang = opts.lang === 'en' ? 'en' : 'zh';
+    // "Fill every empty seat": put spare people in even if balance suffers, but never
+    // break a rule (violations stay far more expensive than this bonus).
+    var fillSeats = opts.fillSeats === true;
+    var placeWeight = fillSeats ? 1e5 : 1e3;
     var maxPerTeam = Math.max(0, parseInt(opts.maxPerTeam, 10) || 0);
     var sizeRange = null;
     if (parseInt(opts.sizeMax, 10) > 0) {
@@ -606,10 +611,10 @@
         var cnt = repTeams[i].length;
         // With a cap, filling spare seats is useful. Without one, place exactly once —
         // extra copies must never be free, or the search would spread them everywhere.
-        if (caps) anyBonus += 1e3 * cnt;
-        else anyBonus += 1e3 * Math.min(1, cnt) - Math.max(0, cnt - 1);
+        if (caps) anyBonus += placeWeight * cnt;
+        else anyBonus += placeWeight * Math.min(1, cnt) - Math.max(0, cnt - 1);
       }
-      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * 1e3 - anyBonus + imbalance;
+      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * placeWeight - anyBonus + imbalance;
       return { score: score, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow, reqOut: reqOut, optPlaced: optPlaced };
     }
 
@@ -865,12 +870,12 @@ const LS = 'teamMaker.v1';
 const els = {
   people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), optional:$('optional'), teams:$('teams'), maxPer:$('maxPer'), seed:$('seed'),
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
-  balance:$('balance'), autoGrow:$('autoGrow'), randomPick:$('randomPick'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
+  balance:$('balance'), autoGrow:$('autoGrow'), randomPick:$('randomPick'), fillSeats:$('fillSeats'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v13';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v14';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -885,6 +890,7 @@ const DICT = {
     lblRepeat:'可以重複（跨隊） <span class="tag">名字 ＝ 可重複（唔一定）· 名字 2 ＝ 最多 2 隊 · 名字 * ＝ 每隊都要</span>',
     phRepeat:'陳教練\n助手 2\n主持 *',
     lblRandomPick:'隨機抽選成員（唔一定人人有隊）',
+    lblFillSeats:'填滿所有空位（除咗撞「唔可以同隊」）',
     notPicked:'未入選（{n} 人）',
     lblTeams:'隊數 <span class="tag">留空＝自動</span>',
     lblSizeMode:'每隊人數',
@@ -933,6 +939,7 @@ const DICT = {
     lblRepeat:'Repeatable (across teams) <span class="tag">name = may repeat · name 2 = up to 2 teams · name * = in every team</span>',
     phRepeat:'Coach\nHelper 2\nHost *',
     lblRandomPick:'Randomly pick who gets in (not everyone has to get a team)',
+    lblFillSeats:'Fill every empty seat (unless it breaks “cannot be together”)',
     notPicked:'Not selected ({n})',
     lblTeams:'Teams <span class="tag">blank = auto</span>',
     lblSizeMode:'Team size',
@@ -985,7 +992,7 @@ function save(){
     localStorage.setItem(LS, JSON.stringify({
       people:els.people.value, cannot:els.cannot.value, must:els.must.value, repeat:els.repeat.value,
       teams:els.teams.value, maxPer:els.maxPer.value, seed:els.seed.value, balance:els.balance.checked,
-      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG, autoGrow:els.autoGrow.checked, randomPick:els.randomPick.checked
+      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG, autoGrow:els.autoGrow.checked, randomPick:els.randomPick.checked, fillSeats:els.fillSeats.checked
     }));
   }catch(e){}
 }
@@ -1004,6 +1011,7 @@ function load(){
     if(typeof s.balance === 'boolean') els.balance.checked = s.balance;
     if(typeof s.autoGrow === 'boolean') els.autoGrow.checked = s.autoGrow;
     if(typeof s.randomPick === 'boolean') els.randomPick.checked = s.randomPick;
+    if(typeof s.fillSeats === 'boolean') els.fillSeats.checked = s.fillSeats;
   }catch(e){}
 }
 
@@ -1120,6 +1128,7 @@ function run(newSeed, keepChosen){
     mustPairs: must.pairs,
     repeat: rep.items,
     optional: optionalNames,
+    fillSeats: els.fillSeats.checked,
     balance: els.balance.checked,
     seed: seed,
     lang: LANG,
@@ -1149,7 +1158,7 @@ function run(newSeed, keepChosen){
 /* ---------- events ---------- */
 els.go.addEventListener('click', () => run(false));
 els.reroll.addEventListener('click', () => run(true));
-[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance, els.autoGrow, els.randomPick].forEach(el => {
+[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance, els.autoGrow, els.randomPick, els.fillSeats].forEach(el => {
   el.addEventListener('input', save); el.addEventListener('change', save);
 });
 els.sizeMode.addEventListener('change', () => {

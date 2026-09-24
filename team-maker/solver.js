@@ -181,6 +181,10 @@
     var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
     var balance = opts.balance !== false;
     var lang = opts.lang === 'en' ? 'en' : 'zh';
+    // "Fill every empty seat": put spare people in even if balance suffers, but never
+    // break a rule (violations stay far more expensive than this bonus).
+    var fillSeats = opts.fillSeats === true;
+    var placeWeight = fillSeats ? 1e5 : 1e3;
     var maxPerTeam = Math.max(0, parseInt(opts.maxPerTeam, 10) || 0);
     var sizeRange = null;
     if (parseInt(opts.sizeMax, 10) > 0) {
@@ -459,10 +463,10 @@
         var cnt = repTeams[i].length;
         // With a cap, filling spare seats is useful. Without one, place exactly once —
         // extra copies must never be free, or the search would spread them everywhere.
-        if (caps) anyBonus += 1e3 * cnt;
-        else anyBonus += 1e3 * Math.min(1, cnt) - Math.max(0, cnt - 1);
+        if (caps) anyBonus += placeWeight * cnt;
+        else anyBonus += placeWeight * Math.min(1, cnt) - Math.max(0, cnt - 1);
       }
-      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * 1e3 - anyBonus + imbalance;
+      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * placeWeight - anyBonus + imbalance;
       return { score: score, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow, reqOut: reqOut, optPlaced: optPlaced };
     }
 
