@@ -256,5 +256,32 @@ console.log('\n[14] 3+ people all in different teams (一行寫晒)');
     S.parsePairs('A ! B ! C').warnings);
 }
 
+console.log('\n[15] bilingual output (lang: "en" / default zh)');
+{
+  const people = S.parsePeople('Alice 3\nBob 2\nCarol 1').people;
+  const clash = S.solve({ people, teams: 2, cannotPairs: S.parsePairs('Alice ! Bob').pairs, mustPairs: S.parsePairs('Alice + Bob').pairs, lang: 'en', seed: 1 });
+  check('EN contradiction message', clash.warnings.some(w => w.includes('contradict')), clash.warnings);
+  const clashZh = S.solve({ people, teams: 2, cannotPairs: S.parsePairs('Alice ! Bob').pairs, mustPairs: S.parsePairs('Alice + Bob').pairs, seed: 1 });
+  check('ZH default unchanged', clashZh.warnings.some(w => w.includes('打架')), clashZh.warnings);
+
+  const cap = S.solve({ people, teams: 2, maxPerTeam: 1, lang: 'en', seed: 1 });
+  check('EN capacity warning', cap.warnings.some(w => w.includes('exceed the per-team limit')), cap.warnings);
+
+  const pe = S.parsePeople('A\nA\nB -2', 'en');
+  check('EN parse warnings (duplicate + bad weight)',
+    pe.warnings.some(w => w.includes('Duplicate')) && pe.warnings.some(w => w.includes('Weight on')), pe.warnings);
+  const pr = S.parsePairs('A ! B ! C', 'en');
+  check('EN 3-name note', pr.warnings.some(w => w.includes('all-separate')), pr.warnings);
+
+  const rres = S.solve({ people, teams: 2, repeat: S.parseRepeat('Nope', 'en').items, lang: 'en', seed: 1 });
+  check('EN repeatable-unknown warning', rres.warnings.some(w => w.includes('not in the list')), rres.warnings);
+
+  const seats = S.solve({ people: [], teams: 2, sizeMin: 2, sizeMax: 4, lang: 'en', seed: 1 });
+  check('EN empty list stays silent', seats.warnings.length === 0, seats.warnings);
+  check('solve() accepts lang without changing results',
+    JSON.stringify(S.solve({ people, teams: 2, seed: 5, lang: 'en' }).teams.map(t => t.members.map(m => m.name))) ===
+    JSON.stringify(S.solve({ people, teams: 2, seed: 5 }).teams.map(t => t.members.map(m => m.name))));
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

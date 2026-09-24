@@ -14,6 +14,55 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  /* ---------- user-facing messages (zh-Hant / en) ---------- */
+  var MSG = {
+    zh: {
+      badWeight: function (line) { return '「' + line + '」權重唔合理，當 1 計'; },
+      dupName: function (n) { return '重複名「' + n + '」，只用第一個'; },
+      pairTooMany: function (line, k) { return '「' + line + '」有 ' + k + ' 個名 → 當佢咁互相都唔同隊'; },
+      pairMalformed: function (line) { return '「' + line + '」格式唔啱（要 A ! B）'; },
+      repeatNoName: function (line) { return '「' + line + '」冇名字，已略過'; },
+      repeatOne: function (n) { return '「' + n + '」寫咗 1 隊，即係唔會重複，已當普通成員'; },
+      repeatUnknown: function (n) { return '「' + n + '」設定咗可重複，但唔喺名單，已略過'; },
+      repeatOnly: function () { return '只剩可重複嘅人，冇普通成員可分'; },
+      neverSeparate: function (a, b) { return '「' + a + '」每隊都有，所以同「' + b + '」冇可能唔同隊 → 已略過呢條規則'; },
+      repeatMust: function (a, b) { return '「' + a + ' / ' + b + '」涉及可重複嘅人，唔支援「必須同隊」，已略過'; },
+      unknownCannot: function (a, b) { return '唔可以同隊「' + a + ' / ' + b + '」入面有名字唔喺名單，已略過'; },
+      unknownMust: function (a, b) { return '必須同隊「' + a + ' / ' + b + '」入面有名字唔喺名單，已略過'; },
+      ruleClash: function (k) { return '規則本身打架：有 ' + k + ' 對同時「必須同隊」又「唔可以同隊」，冇可能同時滿足'; },
+      tooManyTeams: function (T, B) { return '隊數（' + T + '）多過可以獨立分嘅組數（' + B + '），會有空隊'; },
+      notEnoughSeats: function (mx, T, tot, need) { return '每隊最多 ' + mx + ' 人 × ' + T + ' 隊 = ' + tot + ' 個位，唔夠放 ' + need + ' 人 —— 加隊數或者提高上限'; },
+      stillOverlap: function (k) { return '有 ' + k + ' 對「唔可以同隊」仍然有重疊（規則太多／衝突，冇完美解）'; },
+      overCap: function (k) { return '有 ' + k + ' 個人超出每隊人數上限 —— 隊數唔夠，加多幾隊或者提高上限'; },
+      emptyList: function () { return '名單係空嘅'; }
+    },
+    en: {
+      badWeight: function (line) { return 'Weight on "' + line + '" looks wrong — using 1'; },
+      dupName: function (n) { return 'Duplicate name "' + n + '" — keeping the first one'; },
+      pairTooMany: function (line, k) { return '"' + line + '" lists ' + k + ' names → treated as all-separate'; },
+      pairMalformed: function (line) { return '"' + line + '" looks wrong (use A ! B)'; },
+      repeatNoName: function (line) { return '"' + line + '" has no name — skipped'; },
+      repeatOne: function (n) { return '"' + n + '" says 1 team, so it does not repeat — treated as a normal member'; },
+      repeatUnknown: function (n) { return '"' + n + '" is marked repeatable but is not in the list — skipped'; },
+      repeatOnly: function () { return 'Only repeatable members left — there is nothing to split'; },
+      neverSeparate: function (a, b) { return '"' + a + '" is in every team, so it can never be apart from "' + b + '" — rule dropped'; },
+      repeatMust: function (a, b) { return '"' + a + ' / ' + b + '" involves a repeatable member — "must be together" is not supported, rule dropped'; },
+      unknownCannot: function (a, b) { return 'Cannot-be-together "' + a + ' / ' + b + '" mentions a name that is not in the list — skipped'; },
+      unknownMust: function (a, b) { return 'Must-be-together "' + a + ' / ' + b + '" mentions a name that is not in the list — skipped'; },
+      ruleClash: function (k) { return 'Rules contradict each other: ' + k + ' pair(s) are both "must be together" and "cannot be together"'; },
+      tooManyTeams: function (T, B) { return 'More teams (' + T + ') than independent groups (' + B + ') — some teams will stay empty'; },
+      notEnoughSeats: function (mx, T, tot, need) { return 'Max ' + mx + ' per team × ' + T + ' teams = ' + tot + ' seats — not enough for ' + need + ' people. Add teams or raise the limit'; },
+      stillOverlap: function (k) { return k + ' "cannot be together" pair(s) still share a team (too many or conflicting rules — no perfect solution)'; },
+      overCap: function (k) { return k + ' people exceed the per-team limit — add teams or raise the limit'; },
+      emptyList: function () { return 'The list is empty'; }
+    }
+  };
+  function msg(lang, key) {
+    var cat = MSG[lang === 'en' ? 'en' : 'zh'];
+    var fn = cat[key] || MSG.zh[key];
+    return fn.apply(null, Array.prototype.slice.call(arguments, 2));
+  }
+
   /* ---------- seeded RNG (mulberry32) ---------- */
   function makeRng(seed) {
     var a = (seed >>> 0) || 1;
@@ -27,7 +76,7 @@
 
   /* ---------- parsing ---------- */
   // "陳大文" -> 1 ; "陳大文 3" / "陳大文,3" / "陳大文*3" / "陳大文(3)" / "陳大文=3" -> 3
-  function parsePeople(text) {
+  function parsePeople(text, lang) {
     var out = [], warnings = [];
     String(text || '').split(/\r?\n/).forEach(function (raw, i) {
       var line = raw.trim();
@@ -42,7 +91,7 @@
         if (m && m[1].trim()) { name = m[1].trim(); weight = parseFloat(m[2]); }
       }
       if (!isFinite(weight) || weight <= 0) {
-        warnings.push('「' + line + '」權重唔合理，當 1 計');
+        warnings.push(msg(lang, 'badWeight', line));
         weight = 1;
       }
       if (weight > 100) { weight = 100; }
@@ -51,7 +100,7 @@
     var seen = Object.create(null), dedup = [];
     out.forEach(function (p) {
       var k = p.name.toLowerCase();
-      if (seen[k]) { warnings.push('重複名「' + p.name + '」，只用第一個'); return; }
+      if (seen[k]) { warnings.push(msg(lang, 'dupName', p.name)); return; }
       seen[k] = 1; dedup.push(p);
     });
     return { people: dedup, warnings: warnings };
@@ -64,7 +113,7 @@
       .map(function (s) { return s.trim(); })
       .filter(function (s) { return s.length > 0; });
   }
-  function parsePairs(text) {
+  function parsePairs(text, lang) {
     var pairs = [], warnings = [];
     String(text || '').split(/\r?\n/).forEach(function (raw) {
       var line = raw.trim();
@@ -76,16 +125,16 @@
         for (var i = 0; i < parts.length; i++) {
           for (var j = i + 1; j < parts.length; j++) pairs.push([parts[i], parts[j]]);
         }
-        warnings.push('「' + line + '」有 ' + parts.length + ' 個名 → 當佢咁互相都唔同隊');
+        warnings.push(msg(lang, 'pairTooMany', line, parts.length));
       } else {
-        warnings.push('「' + line + '」格式唔啱（要 A ! B）');
+        warnings.push(msg(lang, 'pairMalformed', line));
       }
     });
     return { pairs: pairs, warnings: warnings };
   }
 
   /* Repeatable people: "Name" = in EVERY team; "Name 2" / "Name x2" / "Name 最多2" = up to 2 teams. */
-  function parseRepeat(text) {
+  function parseRepeat(text, lang) {
     var items = [], warnings = [];
     String(text || '').split(/\r?\n/).forEach(function (raw) {
       var line = raw.trim();
@@ -94,8 +143,8 @@
       var m = line.match(/^(.*?)[\s]*(?:x|×|\*|=|max|最多|可|每)\s*(\d+)\s*$/i)
            || line.match(/^(.*?)\s+(\d+)\s*$/);
       if (m && m[1].trim()) { name = m[1].trim(); teams = parseInt(m[2], 10); }
-      if (!name) { warnings.push('「' + line + '」冇名字，已略過'); return; }
-      if (teams === 1) { warnings.push('「' + name + '」寫咗 1 隊，即係唔會重複，已當普通成員'); }
+      if (!name) { warnings.push(msg(lang, 'repeatNoName', line)); return; }
+      if (teams === 1) { warnings.push(msg(lang, 'repeatOne', name)); }
       items.push({ name: name, teams: teams > 1 ? teams : 0 });
     });
     return { items: items, warnings: warnings };
@@ -119,6 +168,7 @@
     var iterations = Math.max(200, Math.min(200000, parseInt(opts.iterations, 10) || 6000));
     var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
     var balance = opts.balance !== false;
+    var lang = opts.lang === 'en' ? 'en' : 'zh';
     var maxPerTeam = Math.max(0, parseInt(opts.maxPerTeam, 10) || 0);
     var sizeRange = null;
     if (parseInt(opts.sizeMax, 10) > 0) {
@@ -155,7 +205,7 @@
     (opts.repeat || []).forEach(function (spec) {
       var key = String(spec.name).toLowerCase();
       if (index[key] === undefined) {
-        warnings.push('「' + spec.name + '」設定咗可重複，但唔喺名單，已略過');
+        warnings.push(msg(lang, 'repeatUnknown', spec.name));
         return;
       }
       var max = parseInt(spec.teams, 10) || 0;
@@ -173,7 +223,7 @@
       }
     });
     repeatList.forEach(function (k) {
-      if (core.length === 0) warnings.push('得返可重複嘅人，冇普通成員可分');
+      if (core.length === 0) warnings.push(msg(lang, 'repeatOnly'));
     });
 
     /* ---- resolve rules ---- */
@@ -190,11 +240,11 @@
         var ra = repeatOf[ka], rb = repeatOf[kb];
         if (ra || rb) {
           if (ra && ra.max === 0) {
-            warnings.push('「' + ra.name + '」每隊都有，所以同「' + pr[1] + '」係冇可能唔同隊 → 已略過呢條規則');
+            warnings.push(msg(lang, 'neverSeparate', ra.name, pr[1]));
             return;
           }
           if (rb && rb.max === 0) {
-            warnings.push('「' + rb.name + '」每隊都有，所以同「' + pr[0] + '」係冇可能唔同隊 → 已略過呢條規則');
+            warnings.push(msg(lang, 'neverSeparate', rb.name, pr[0]));
             return;
           }
           if (ra && rb) { forbid(ka, { rep: kb }); forbid(kb, { rep: ka }); return; }
@@ -204,7 +254,7 @@
         }
         var ia = coreByName[ka], ib = coreByName[kb];
         if (ia === undefined || ib === undefined) {
-          warnings.push('唔可以同隊「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
+          warnings.push(msg(lang, 'unknownCannot', pr[0], pr[1]));
           return;
         }
         if (ia !== ib) cannotCore.push([ia, ib]);
@@ -216,12 +266,12 @@
         var ka = pr[0].toLowerCase(), kb = pr[1].toLowerCase();
         var ra = repeatOf[ka], rb = repeatOf[kb];
         if (ra || rb) {
-          warnings.push('「' + pr[0] + ' / ' + pr[1] + '」涉及可重複嘅人，唔支援「必須同隊」，已略過');
+          warnings.push(msg(lang, 'repeatMust', pr[0], pr[1]));
           return;
         }
         var ia = coreByName[ka], ib = coreByName[kb];
         if (ia === undefined || ib === undefined) {
-          warnings.push('必須同隊「' + pr[0] + ' / ' + pr[1] + '」入面有名字唔喺名單，已略過');
+          warnings.push(msg(lang, 'unknownMust', pr[0], pr[1]));
           return;
         }
         if (ia !== ib) out.push([ia, ib]);
@@ -268,10 +318,10 @@
       }
     });
     if (conflicts.length) {
-      warnings.push('規則本身打架：有 ' + conflicts.length + ' 對同時「必須同隊」又「唔可以同隊」，冇可能同時滿足');
+      warnings.push(msg(lang, 'ruleClash', conflicts.length));
     }
     if (T > blocks.length) {
-      warnings.push('隊數（' + T + '）多過可以獨立分嘅組數（' + blocks.length + '），會有空隊');
+      warnings.push(msg(lang, 'tooManyTeams', T, blocks.length));
     }
 
     var maxRepeat = 0;
@@ -297,7 +347,7 @@
         caps[grow]++; capTotal++;
       }
       if (capTotal < needed) {
-        warnings.push('每隊最多 ' + sizeRange.max + ' 人 × ' + T + ' 隊 = ' + capTotal + ' 個位，唔夠放 ' + needed + ' 人 —— 加隊數或者提高上限');
+        warnings.push(msg(lang, 'notEnoughSeats', sizeRange.max, T, capTotal, needed));
       }
     } else if (maxPerTeam > 0) {
       caps = [];
@@ -453,10 +503,10 @@
     });
 
     if (best.violations.length) {
-      warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然有重疊（規則太多／衝突，冇完美解）');
+      warnings.push(msg(lang, 'stillOverlap', best.violations.length));
     }
     if (caps && best.overflow > 0) {
-      warnings.push('有 ' + best.overflow + ' 個人超出每隊人數上限 —— 隊數唔夠，加多幾隊或者提高上限');
+      warnings.push(msg(lang, 'overCap', best.overflow));
     }
 
     return {
