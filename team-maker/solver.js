@@ -25,6 +25,8 @@
       repeatOne: function (n) { return '「' + n + '」寫咗 1 隊，即係唔會重複，已當普通成員'; },
       repeatUnknown: function (n) { return '「' + n + '」設定咗可重複，但唔喺名單，已略過'; },
       repeatOnly: function () { return '只剩可重複嘅人，冇普通成員可分'; },
+      optionalUnknown: function (n) { return '「' + n + '」設定咗可以唔入隊，但唔喺名單，已略過'; },
+      benchNote: function (k) { return '有 ' + k + ' 個人冇入任何隊（候補）'; },
       neverSeparate: function (a, b) { return '「' + a + '」每隊都有，所以同「' + b + '」冇可能唔同隊 → 已略過呢條規則'; },
       repeatMust: function (a, b) { return '「' + a + ' / ' + b + '」涉及可重複嘅人，唔支援「必須同隊」，已略過'; },
       unknownCannot: function (a, b) { return '唔可以同隊「' + a + ' / ' + b + '」入面有名字唔喺名單，已略過'; },
@@ -45,6 +47,8 @@
       repeatOne: function (n) { return '"' + n + '" says 1 team, so it does not repeat — treated as a normal member'; },
       repeatUnknown: function (n) { return '"' + n + '" is marked repeatable but is not in the list — skipped'; },
       repeatOnly: function () { return 'Only repeatable members left — there is nothing to split'; },
+      optionalUnknown: function (n) { return '"' + n + '" is marked optional but is not in the list — skipped'; },
+      benchNote: function (k) { return k + ' member(s) are in no team (on the bench)'; },
       neverSeparate: function (a, b) { return '"' + a + '" is in every team, so it can never be apart from "' + b + '" — rule dropped'; },
       repeatMust: function (a, b) { return '"' + a + ' / ' + b + '" involves a repeatable member — "must be together" is not supported, rule dropped'; },
       unknownCannot: function (a, b) { return 'Cannot-be-together "' + a + ' / ' + b + '" mentions a name that is not in the list — skipped'; },
@@ -196,7 +200,7 @@
       }
       var seatTeams = [];
       for (var s0 = 0; s0 < T; s0++) seatTeams.push({ id: s0, members: [], count: 0, weight: 0, cap: seatCaps ? seatCaps[s0] : 0 });
-      return { teams: seatTeams, repeats: [], violations: [], conflicts: [], warnings: [], imbalance: 0, maxPerTeam: maxPerTeam, caps: seatCaps, sizeRange: sizeRange, ok: true };
+      return { teams: seatTeams, repeats: [], bench: [], violations: [], conflicts: [], warnings: [], imbalance: 0, maxPerTeam: maxPerTeam, caps: seatCaps, sizeRange: sizeRange, ok: true };
     }
 
     /* ---- split repeatable people out of the core ---- */
@@ -215,13 +219,25 @@
       repeatOf[key] = { max: max, name: people[index[key]].name, weight: people[index[key]].weight };
     });
 
-    var core = [], coreByName = Object.create(null);
+    // Optional people may end up in NO team; everybody else must be placed.
+    var optionalKeys = Object.create(null);
+    (opts.optional || []).forEach(function (spec) {
+      var nm = (spec && spec.name !== undefined) ? spec.name : spec;
+      var ok = String(nm).toLowerCase();
+      if (index[ok] === undefined) { warnings.push(msg(lang, 'optionalUnknown', nm)); return; }
+      optionalKeys[ok] = 1;
+    });
+
+    var core = [], coreByName = Object.create(null), optionalFlags = [];
     people.forEach(function (p) {
-      if (repeatOf[p.name.toLowerCase()] === undefined) {
-        coreByName[p.name.toLowerCase()] = core.length;
+      var k = p.name.toLowerCase();
+      if (repeatOf[k] === undefined) {
+        coreByName[k] = core.length;
+        optionalFlags.push(optionalKeys[k] ? 1 : 0);
         core.push(p);
       }
     });
+    var requiredCount = optionalFlags.reduce(function (s, f) { return s + (f ? 0 : 1); }, 0);
     repeatList.forEach(function (k) {
       if (core.length === 0) warnings.push(msg(lang, 'repeatOnly'));
     });
@@ -293,7 +309,7 @@
         tm.count = tm.members.length;
         tm.weight = Math.round(tm.members.reduce(function (s, m) { return s + m.weight; }, 0) * 100) / 100;
       });
-      return { teams: emptyTeams, violations: [], conflicts: [], warnings: warnings, imbalance: 0, ok: true };
+      return { teams: emptyTeams, repeats: [], bench: [], violations: [], conflicts: [], warnings: warnings, imbalance: 0, ok: true };
     }
 
     /* ---- blocks: must-be-together groups ---- */
@@ -310,6 +326,13 @@
       blocks[b].push(i); blockWeight[b] += p.weight; blockMembers[b].push(p.name);
     });
     var blockOf = core.map(function (_, i) { return blockIndexOf[dsu.find(i)]; });
+
+    // A block must be placed if any member is required; only all-optional blocks may sit out.
+    var blockRequired = blocks.map(function (bs) {
+      return bs.some(function (pi) { return optionalFlags[pi] === 0; });
+    });
+    var optionalBlockIds = [];
+    blockRequired.forEach(function (req, b) { if (!req) optionalBlockIds.push(b); });
 
     var conflicts = [];
     cannotCore.forEach(function (p) {
@@ -330,7 +353,7 @@
     /* ---- per-team capacities: a fixed cap, or a random size in [min,max] ---- */
     var caps = null;
     if (sizeRange) {
-      var needed = core.length;
+      var needed = requiredCount;
       repeatList.forEach(function (k) { var s = repeatOf[k]; needed += (s.max === 0 ? T : s.max); });
       var capsRng = makeRng((seed ^ 0x5bf03635) >>> 0);
       caps = [];
@@ -410,7 +433,17 @@
       if (caps) {
         for (t = 0; t < T; t++) if (counts[t] > caps[t]) overflow += counts[t] - caps[t];
       }
-      return { score: violations.length * 1e6 + overflow * 1e4 + imbalance, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow };
+      // people who MUST be in a team but are not, and optional people who got a seat
+      var reqOut = 0, optPlaced = 0;
+      for (i = 0; i < blocks.length; i++) {
+        var assigned = (teamOf[i] >= 0 && teamOf[i] < T);
+        var optMembers = 0, bi;
+        for (bi = 0; bi < blocks[i].length; bi++) if (optionalFlags[blocks[i][bi]]) optMembers++;
+        if (!assigned) reqOut += (blockMembers[i].length - optMembers);
+        else optPlaced += optMembers;
+      }
+      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * 1e3 + imbalance;
+      return { score: score, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow, reqOut: reqOut, optPlaced: optPlaced };
     }
 
     var rng = makeRng(seed);
@@ -444,7 +477,12 @@
       for (var it = 0; it < iterations; it++) {
         var cand = teamOf.slice(), candRep = repTeams.map(function (a) { return a.slice(); });
         var roll = rng();
-        if (maxRepeat > 0 && roll < 0.25) {
+        if (optionalBlockIds.length && roll < 0.2) {
+          // toggle an all-optional block between "no team" and a team
+          var ob = optionalBlockIds[Math.floor(rng() * optionalBlockIds.length)];
+          if (cand[ob] >= 0) cand[ob] = -1;
+          else cand[ob] = Math.floor(rng() * T);
+        } else if (maxRepeat > 0 && roll < 0.4) {
           // move a limited-repeat person to a different team
           var idxs = [];
           repeatList.forEach(function (kk, ii) { if (repeatOf[kk].max > 0) idxs.push(ii); });
@@ -457,7 +495,7 @@
           var drop = Math.floor(rng() * set.length);
           set[drop] = to;
           set.sort(function (a, b) { return a - b; });
-        } else if (blocks.length > 1 && roll < 0.75) {
+        } else if (blocks.length > 1 && roll < 0.8) {
           var b1 = Math.floor(rng() * blocks.length), b2 = Math.floor(rng() * blocks.length);
           if (b1 === b2 || cand[b1] === cand[b2]) continue;
           var tt = cand[b1]; cand[b1] = cand[b2]; cand[b2] = tt;
@@ -478,10 +516,17 @@
 
     /* ---- build output ---- */
     var teams = [];
+    var bench = [];
     for (var t2 = 0; t2 < T; t2++) teams.push({ id: t2, members: [], weight: 0, cap: caps ? caps[t2] : 0 });
     blocks.forEach(function (_, b) {
       var t3 = bestTeamOf[b];
-      if (t3 < 0 || t3 >= T) t3 = 0;
+      if (t3 < 0 || t3 >= T) {
+        if (!blockRequired[b]) {
+          blocks[b].forEach(function (pi) { bench.push({ name: core[pi].name, weight: core[pi].weight }); });
+          return;
+        }
+        t3 = 0;   // a required block always lands somewhere
+      }
       blocks[b].forEach(function (pi) { teams[t3].members.push({ name: core[pi].name, weight: core[pi].weight }); });
     });
     repeatList.forEach(function (key, i) {
@@ -502,6 +547,7 @@
       return { name: spec.name, teams: spec.max === 0 ? T : spec.max, every: spec.max === 0 };
     });
 
+    if (bench.length) warnings.push(msg(lang, 'benchNote', bench.length));
     if (best.violations.length) {
       warnings.push(msg(lang, 'stillOverlap', best.violations.length));
     }
@@ -512,6 +558,7 @@
     return {
       teams: teams,
       repeats: repeats,
+      bench: bench,
       maxPerTeam: maxPerTeam,
       caps: caps,
       sizeRange: sizeRange,

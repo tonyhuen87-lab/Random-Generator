@@ -416,5 +416,41 @@ console.log('\n[21] planTeams: you can always shrink the team count back');
   check('grow respects the 20-team ceiling', h.teams === 5, h);
 }
 
+console.log('\n[22] optional members may stay out of every team (bench)');
+{
+  const names = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  const people = S.parsePeople(names.join('\n')).people;
+  const opt = ['I','J','K','L'];
+
+  const res = S.solve({ people, teams: 2, maxPerTeam: 5, optional: opt, seed: 5 });
+  const placed = res.teams.reduce((s, t) => s + t.count, 0);
+  check('total placed fits the caps (≤10)', placed <= 10, placed);
+  check('every required person is placed',
+    ['A','B','C','D','E','F','G','H'].every(n => res.teams.some(t => t.members.some(m => m.name === n))),
+    res.teams.map(t => t.members.map(m => m.name)));
+  check('leftover optional people sit on the bench', res.bench.length === 12 - placed, [res.bench.length, placed]);
+  check('only optional people are benched', res.bench.every(b => opt.indexOf(b.name) >= 0), res.bench.map(b => b.name));
+  check('no team exceeds its cap', res.teams.every((t, i) => t.count <= res.caps[i]), res.teams.map((t, i) => t.count + '/' + res.caps[i]));
+  check('no overflow warning', !res.warnings.some(w => w.includes('超出')), res.warnings);
+  check('warns that people are on the bench', res.warnings.some(w => w.includes('候補')), res.warnings);
+
+  const roomy = S.solve({ people, teams: 4, maxPerTeam: 5, optional: opt, seed: 5 });
+  check('with free seats nobody sits out', roomy.bench.length === 0, roomy.bench.length);
+
+  const open = S.solve({ people, teams: 3, optional: opt, seed: 5 });
+  check('unlimited size → bench stays empty', open.bench.length === 0, open.bench.length);
+
+  const mixed = S.solve({ people, teams: 3, maxPerTeam: 4, optional: ['D'], mustPairs: [['A','D']], seed: 7 });
+  check('a required+optional block is placed together',
+    ['A','D'].every(n => mixed.teams.some(t => t.members.some(m => m.name === n))),
+    mixed.teams.map(t => t.members.map(m => m.name)));
+
+  const bad = S.solve({ people, teams: 2, optional: ['Nobody'], seed: 1 });
+  check('unknown optional name is warned about', bad.warnings.some(w => w.includes('唔喺名單')), bad.warnings);
+  check('results stay deterministic for one seed',
+    JSON.stringify(S.solve({ people, teams: 2, maxPerTeam: 5, optional: opt, seed: 5 }).bench.map(b => b.name)) ===
+    JSON.stringify(res.bench.map(b => b.name)));
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);
