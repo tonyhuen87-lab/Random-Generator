@@ -432,7 +432,7 @@ console.log('\n[22] optional members may stay out of every team (bench)');
   check('only optional people are benched', res.bench.every(b => opt.indexOf(b.name) >= 0), res.bench.map(b => b.name));
   check('no team exceeds its cap', res.teams.every((t, i) => t.count <= res.caps[i]), res.teams.map((t, i) => t.count + '/' + res.caps[i]));
   check('no overflow warning', !res.warnings.some(w => w.includes('超出')), res.warnings);
-  check('warns that people are on the bench', res.warnings.some(w => w.includes('候補')), res.warnings);
+  check('warns that some people were not selected', res.warnings.some(w => w.includes('冇入任何隊')), res.warnings);
 
   const roomy = S.solve({ people, teams: 4, maxPerTeam: 5, optional: opt, seed: 5 });
   check('with free seats nobody sits out', roomy.bench.length === 0, roomy.bench.length);

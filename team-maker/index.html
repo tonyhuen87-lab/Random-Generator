@@ -92,8 +92,6 @@
   <textarea id="must" class="rule" spellcheck="false" data-i18n-ph="phMust"></textarea>
   <label style="margin-top:12px" data-i18n="lblRepeat"></label>
   <textarea id="repeat" class="rule" spellcheck="false" data-i18n-ph="phRepeat"></textarea>
-  <label style="margin-top:12px" data-i18n="lblOptional"></label>
-  <textarea id="optional" class="rule" spellcheck="false" data-i18n-ph="phOptional"></textarea>
   <div class="row">
     <div style="flex:1 1 90px">
       <label data-i18n="lblTeams"></label>
@@ -124,6 +122,7 @@
   <div class="row">
     <label class="switch"><input type="checkbox" id="balance" checked> <span data-i18n="lblBalance"></span></label>
     <label class="switch"><input type="checkbox" id="autoGrow" checked> <span data-i18n="lblAutoGrow"></span></label>
+    <label class="switch"><input type="checkbox" id="randomPick"> <span data-i18n="lblRandomPick"></span></label>
   </div>
   <div class="hint" data-i18n="hint"></div>
 </div>
@@ -152,12 +151,12 @@ const LS = 'teamMaker.v1';
 const els = {
   people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), optional:$('optional'), teams:$('teams'), maxPer:$('maxPer'), seed:$('seed'),
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
-  balance:$('balance'), autoGrow:$('autoGrow'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
+  balance:$('balance'), autoGrow:$('autoGrow'), randomPick:$('randomPick'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v11';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v12';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -171,9 +170,8 @@ const DICT = {
     phMust:'李小明 + 王五',
     lblRepeat:'可以重複（跨隊） <span class="tag">名字 ＝ 每隊都有　·　名字 2 ＝ 最多 2 隊</span>',
     phRepeat:'陳教練\n助手 2',
-    lblOptional:'可以唔入隊（候補） <span class="tag">每行一個；位唔夠就會坐低</span>',
-    phOptional:'後備A\n後備B',
-    benchTitle:'未入隊（{n} 人）',
+    lblRandomPick:'隨機抽選成員（唔一定人人有隊）',
+    notPicked:'未入選（{n} 人）',
     lblTeams:'隊數 <span class="tag">留空＝自動</span>',
     lblSizeMode:'每隊人數',
     optCap:'上限（最多 N 人）',
@@ -220,9 +218,8 @@ const DICT = {
     phMust:'Bob + Dave',
     lblRepeat:'Repeatable (across teams) <span class="tag">name = in every team · name 2 = up to 2 teams</span>',
     phRepeat:'Coach\nHelper 2',
-    lblOptional:'May stay out of every team <span class="tag">one name per line; sits out when seats run out</span>',
-    phOptional:'Reserve A\nReserve B',
-    benchTitle:'Not in any team ({n})',
+    lblRandomPick:'Randomly pick who gets in (not everyone has to get a team)',
+    notPicked:'Not selected ({n})',
     lblTeams:'Teams <span class="tag">blank = auto</span>',
     lblSizeMode:'Team size',
     optCap:'Limit (max N)',
@@ -272,9 +269,9 @@ function t(key, params){
 function save(){
   try{
     localStorage.setItem(LS, JSON.stringify({
-      people:els.people.value, cannot:els.cannot.value, must:els.must.value, repeat:els.repeat.value, optional:els.optional.value,
+      people:els.people.value, cannot:els.cannot.value, must:els.must.value, repeat:els.repeat.value,
       teams:els.teams.value, maxPer:els.maxPer.value, seed:els.seed.value, balance:els.balance.checked,
-      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG, autoGrow:els.autoGrow.checked
+      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG, autoGrow:els.autoGrow.checked, randomPick:els.randomPick.checked
     }));
   }catch(e){}
 }
@@ -285,7 +282,6 @@ function load(){
     LANG = s.lang === 'en' ? 'en' : (s.lang === 'zh' ? 'zh' : ((navigator.language || 'zh').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en'));
     els.people.value = s.people || ''; els.cannot.value = s.cannot || ''; els.must.value = s.must || '';
     els.repeat.value = s.repeat || '';
-    els.optional.value = s.optional || '';
     if(s.teams !== undefined) els.teams.value = s.teams;
     if(s.maxPer !== undefined) els.maxPer.value = s.maxPer;
     if(s.sizeMode) els.sizeMode.value = s.sizeMode;
@@ -293,6 +289,7 @@ function load(){
     if(s.seed) els.seed.value = s.seed;
     if(typeof s.balance === 'boolean') els.balance.checked = s.balance;
     if(typeof s.autoGrow === 'boolean') els.autoGrow.checked = s.autoGrow;
+    if(typeof s.randomPick === 'boolean') els.randomPick.checked = s.randomPick;
   }catch(e){}
 }
 
@@ -340,7 +337,7 @@ function render(res){
     }
     const benchHtml = (res.bench && res.bench.length) ? `
       <div class="team bench">
-        <h2><span>${t('benchTitle', {n: res.bench.length})}</span></h2>
+        <h2><span>${t('notPicked', {n: res.bench.length})}</span></h2>
         <ul class="members">
           ${res.bench.map(m => `<li class="seat">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}</li>`).join('')}
         </ul>
@@ -374,10 +371,9 @@ function run(newSeed, keepChosen){
   const cannot = TeamSolver.parsePairs(els.cannot.value, LANG);
   const must = TeamSolver.parsePairs(els.must.value, LANG);
   const rep = TeamSolver.parseRepeat(els.repeat.value, LANG);
-  const optionalNames = els.optional.value.split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
-  const optionalSet = {};
-  optionalNames.forEach(function(n){ optionalSet[n.toLowerCase()] = 1; });
-  const requiredPeople = parsed.people.filter(function(p){ return !optionalSet[p.name.toLowerCase()]; }).length;
+  const randomPick = els.randomPick.checked;
+  // Random-pick mode: everybody is a candidate, so the solver may leave people out.
+  const optionalNames = randomPick ? parsed.people.map(function(p){ return p.name; }) : [];
   const randomSizes = els.sizeMode.value === 'random';
   const range = TeamSolver.normalizeRange(els.sizeMin.value, els.maxPer.value);
   // Cap mode: use the max box ONLY (a stale hidden "min" used to inflate the cap).
@@ -388,10 +384,11 @@ function run(newSeed, keepChosen){
   const pinned = parseInt(els.teams.value, 10) || 0;
   // planTeams settles the final count: auto-grow on → the cap wins; off → your number wins
   // (so lowering the team count always shrinks back).
+  const planCore = randomPick ? (pinned ? 0 : parsed.people.length) : parsed.people.length;
   const plan = TeamSolver.planTeams({
     pinned: pinned,
     cap: perTeamCap,
-    core: requiredPeople,
+    core: planCore,
     repeats: rep.items,
     autoGrow: els.autoGrow.checked
   });
@@ -438,7 +435,7 @@ function run(newSeed, keepChosen){
 /* ---------- events ---------- */
 els.go.addEventListener('click', () => run(false));
 els.reroll.addEventListener('click', () => run(true));
-[els.people, els.cannot, els.must, els.repeat, els.optional, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance, els.autoGrow].forEach(el => {
+[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance, els.autoGrow, els.randomPick].forEach(el => {
   el.addEventListener('input', save); el.addEventListener('change', save);
 });
 els.sizeMode.addEventListener('change', () => {
