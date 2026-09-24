@@ -559,5 +559,11 @@
     return { min: mn, max: mx, note: note, fixed: mx === mn };
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange };
+  // Cap mode reads ONLY the max box. A leftover "min" value must never leak into it.
+  function parseCap(v) {
+    var n = parseInt(v, 10);
+    return (isFinite(n) && n > 0) ? n : 0;   // 0 = no limit
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap };
 });

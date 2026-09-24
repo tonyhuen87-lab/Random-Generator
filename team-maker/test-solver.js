@@ -316,5 +316,21 @@ console.log('\n[17] min/max range must never invent a number (bug fix)');
   check('caps all equal 5', res.caps.every(c => c === 5), res.caps);
 }
 
+console.log('\n[18] cap mode must ignore a leftover hidden "min" (second bug report)');
+{
+  check('parseCap("5") = 5', S.parseCap('5') === 5, S.parseCap('5'));
+  check('parseCap("") = 0 (no limit)', S.parseCap('') === 0, S.parseCap(''));
+  check('parseCap("0") = 0', S.parseCap('0') === 0, S.parseCap('0'));
+  check('parseCap("-3") = 0', S.parseCap('-3') === 0, S.parseCap('-3'));
+
+  // the actual regression: stale min=10 must not raise a cap of 5
+  const people = S.parsePeople(Array.from({ length: 10 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
+  const cap = S.parseCap('5');
+  const res = S.solve({ people, teams: 3, maxPerTeam: cap, sizeMin: 10, sizeMax: 0, seed: 4 });
+  check('cap of 5 applies even with a stale sizeMin=10', res.caps.every(c => c === 5), res.caps);
+  check('no team exceeds 5', res.teams.every(t => t.count <= 5), res.teams.map(t => t.count));
+  check('no capacity warning (10 people fit in 3x5)', !res.warnings.some(w => w.includes('超出')), res.warnings);
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

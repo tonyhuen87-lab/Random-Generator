@@ -57,6 +57,8 @@
   .team{border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px;background:var(--card)}
   .team h2{font-size:16px;margin:0 0 4px;display:flex;justify-content:space-between;align-items:center}
   .team h2 em{font-style:normal;font-size:12px;color:var(--dim);font-weight:400}
+  .team h2 em.over{color:var(--bad);font-weight:700}
+  .ver{color:var(--dim);font-size:11px;text-align:center;margin:18px 0 4px;letter-spacing:.5px}
   .members{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
   .members li{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:14px}
   .members li b{color:var(--accent);font-weight:600;font-size:12px;margin-left:5px}
@@ -133,6 +135,8 @@
 </div>
 <div class="good hidden" id="chosenInfo"></div>
 <div id="results"></div>
+
+<div class="ver" id="ver"></div>
 
 <script>
 /* Team Maker — pure solver (no DOM).
@@ -696,7 +700,13 @@
     return { min: mn, max: mx, note: note, fixed: mx === mn };
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange };
+  // Cap mode reads ONLY the max box. A leftover "min" value must never leak into it.
+  function parseCap(v) {
+    var n = parseInt(v, 10);
+    return (isFinite(n) && n > 0) ? n : 0;   // 0 = no limit
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap };
 });
 
 </script>
@@ -708,9 +718,10 @@ const els = {
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
   balance:$('balance'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
-  toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam')
+  toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
+const VERSION = 'v6';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -837,6 +848,13 @@ function updateSizeMode(){
   const r = els.sizeMode.value === 'random';
   els.sizeMinWrap.classList.toggle('hidden', !r);
   els.maxPerLabel.innerHTML = t(r ? 'lblMaxPerRandom' : 'lblMaxPer');
+  updateVer();
+}
+
+function updateVer(){
+  const rnd = els.sizeMode.value === 'random';
+  const rg = TeamSolver.normalizeRange(els.sizeMin.value, els.maxPer.value);
+  els.ver.textContent = VERSION + ' · ' + (rnd ? ('random ' + rg.min + '–' + rg.max) : ('max ' + (TeamSolver.parseCap(els.maxPer.value) || '∞')));
 }
 
 function applyLang(){
@@ -870,7 +888,7 @@ function render(res){
     }
     els.results.innerHTML = res.teams.map((t_,i) => `
       <div class="team${chosen === i ? ' sel' : ''}">
-        <h2><span>${t('teamWord')} ${LETTERS[i] || '#'+(i+1)}</span> <em>${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})}</em><button class="pickbtn${chosen === i ? ' on' : ''}" data-team="${i}" type="button">${chosen === i ? t('btnPicked') : t('btnPick')}</button></h2>
+        <h2><span>${t('teamWord')} ${LETTERS[i] || '#'+(i+1)}</span> <em class="${caps && caps[i] && t_.count > caps[i] ? 'over' : ''}">${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})}</em><button class="pickbtn${chosen === i ? ' on' : ''}" data-team="${i}" type="button">${chosen === i ? t('btnPicked') : t('btnPick')}</button></h2>
         <div class="bar"><i style="width:${Math.round(t_.weight/max*100)}%"></i></div>
         <ul class="members">
           ${t_.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? t('everyTeam') : '×' + m.repeat}</b>` : ''}</li>`).join('')}${caps && caps[i] ? Array.from({length: Math.max(0, caps[i] - t_.count)}, () => `<li class="seat">${t('seat')}</li>`).join('') : (t_.members.length ? '' : `<li style="color:var(--dim)">${t('empty')}</li>`)}
@@ -899,8 +917,9 @@ function run(newSeed, keepChosen){
   const rep = TeamSolver.parseRepeat(els.repeat.value, LANG);
   const randomSizes = els.sizeMode.value === 'random';
   const range = TeamSolver.normalizeRange(els.sizeMin.value, els.maxPer.value);
-  const maxPer = range.max;
-  const sizeMin = range.min;
+  // Cap mode: use the max box ONLY (a stale hidden "min" used to inflate the cap).
+  const maxPer = randomSizes ? range.max : TeamSolver.parseCap(els.maxPer.value);
+  const sizeMin = randomSizes ? range.min : 1;
   const sizeMax = randomSizes ? range.max : 0;
   let teamCount = parseInt(els.teams.value, 10) || 0;
   const autoTeamCount = !teamCount;
@@ -934,6 +953,7 @@ function run(newSeed, keepChosen){
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(t('solved', {ms:ms, s:seed}));
   if(!keepChosen) chosen = null;
+  updateVer();
   render(res);
   window.__last = res;
   save();
@@ -1013,6 +1033,7 @@ els.demo.addEventListener('click', () => {
 
 load();
 applyLang();
+updateVer();
 if(!els.people.value) els.status.innerHTML = `<div class="hint">${t('idle')}</div>`;
 </script>
 </body>
