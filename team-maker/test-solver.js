@@ -294,5 +294,27 @@ console.log('\n[16] pick-a-team helper (後加嘅揀隊功能)');
   check('no seed still returns a valid index', (() => { const x = S.randomIndex(3); return x >= 0 && x < 3; })());
 }
 
+console.log('\n[17] min/max range must never invent a number (bug fix)');
+{
+  const a = S.normalizeRange(5, 0);
+  check('min 5 / max blank → 5–5 (no silent 10)', a.min === 5 && a.max === 5 && a.note === 'blank', a);
+  check('blank max is reported as fixed', a.fixed === true);
+  const b = S.normalizeRange(1, 10);
+  check('1–10 stays a real range', b.min === 1 && b.max === 10 && b.note === null && b.fixed === false, b);
+  const c = S.normalizeRange(5, 3);
+  check('max below min is clamped up', c.min === 5 && c.max === 5 && c.note === 'clamped', c);
+  const d = S.normalizeRange('', '');
+  check('empty inputs → 1–1', d.min === 1 && d.max === 1, d);
+  const e = S.normalizeRange(5, 5);
+  check('equal min/max → fixed', e.fixed === true && e.max === 5, e);
+
+  // end-to-end: min 5, blank max, 12 people → no team may exceed 5 (and not 10)
+  const people = S.parsePeople(Array.from({ length: 12 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
+  const r = S.normalizeRange(5, 0);
+  const res = S.solve({ people, teams: 3, sizeMin: r.min, sizeMax: r.max, seed: 3 });
+  check('every team ≤ 5 when the user asked for 5', res.teams.every(t => t.count <= 5), res.teams.map(t => t.count));
+  check('caps all equal 5', res.caps.every(c => c === 5), res.caps);
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

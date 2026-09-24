@@ -547,5 +547,17 @@
     });
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex };
+  // Turn the two min/max inputs into a real range. Never invents a silent default:
+  // blank/0 max → same as min; max below min → clamped up to min.
+  function normalizeRange(minInput, maxInput) {
+    var mn = Math.max(1, parseInt(minInput, 10) || 1);
+    var raw = parseInt(maxInput, 10) || 0;
+    var note = null;
+    if (raw <= 0) { note = 'blank'; }
+    else if (raw < mn) { note = 'clamped'; }
+    var mx = (raw > 0 && raw >= mn) ? raw : mn;
+    return { min: mn, max: mx, note: note, fixed: mx === mn };
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange };
 });

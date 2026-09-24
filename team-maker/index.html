@@ -167,7 +167,7 @@ const DICT = {
     phSeed:'隨機',
     lblSizeMin:'每隊最少',
     lblMaxPer:'每隊最多 <span class="tag">0＝不限</span>',
-    lblMaxPerRandom:'每隊最多（隨機上限）',
+    lblMaxPerRandom:'每隊最多（隨機上限；留空＝同最少一樣）',
     lblBalance:'平均分配權重',
     hint:'規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。',
     btnGo:'分隊！', btnReroll:'重新抽（換 seed）', btnCopy:'複製結果', btnDemo:'載入示範',
@@ -185,7 +185,11 @@ const DICT = {
     autoTeams:'隊數留空 → 自動用 {n} 隊',
     solved:'（用 {ms}ms 搜完，seed {s}）',
     copied:'已複製 ✓', copyFail:'複製失敗，長按結果自己複製',
-    idle:'輸入名單（同規則）再撳「分隊」。想睇效果可以撳「載入示範」。'
+    idle:'輸入名單（同規則）再撳「分隊」。想睇效果可以撳「載入示範」。',
+    sizeMaxBlank:'「最多」留空 → 已當同「最少」一樣（每隊 {n} 人）；想隨機請把「最多」填大啲',
+    sizeMaxTooSmall:'「最多」細過「最少」→ 已當 {n} 人',
+    sizeMinEqMax:'最少＝最多 → 每隊固定 {n} 人（想隨機就加大「最多」）',
+    pickedCopied:'已複製揀嘅隊 ✓'
   },
   en: {
     title:'Teams',
@@ -205,7 +209,7 @@ const DICT = {
     phSeed:'random',
     lblSizeMin:'Min per team',
     lblMaxPer:'Max per team <span class="tag">0 = no limit</span>',
-    lblMaxPerRandom:'Max per team (random upper bound)',
+    lblMaxPerRandom:'Max per team (upper bound; blank = same as min)',
     lblBalance:'Balance total weight',
     hint:'Rules: <code>!</code>, <code>×</code> or <code>,</code> means “keep apart”; <code>+</code> means “keep together”. Names must match the list above.<br>Want <b>3 people (or more) all in different teams</b>? Put them on one line — <code>X ! Y ! Z</code> (auto-expands to every pair).<br>Repeatable column: <code>Coach</code> = in every team; <code>Helper 2</code> = in up to 2 teams (picks the teams that need it most). “Every team” members are excluded from weight balancing.<br>You don’t have to fill the list — once a per-team size is set, the leftover places show as “empty” seats you can fill later.',
     btnGo:'Build teams!', btnReroll:'Re-roll (new seed)', btnCopy:'Copy result', btnDemo:'Load demo',
@@ -223,7 +227,11 @@ const DICT = {
     autoTeams:'Teams left blank → using {n} automatically',
     solved:'(solved in {ms}ms, seed {s})',
     copied:'Copied ✓', copyFail:'Copy failed — long-press the result to copy',
-    idle:'Enter a list (plus any rules), then press “Build teams!”. Try “Load demo” to see it work.'
+    idle:'Enter a list (plus any rules), then press “Build teams!”. Try “Load demo” to see it work.',
+    sizeMaxBlank:'“Max” was left blank → treated as the same as “Min” ({n} per team). Set a larger “Max” to randomise',
+    sizeMaxTooSmall:'“Max” was smaller than “Min” → using {n}',
+    sizeMinEqMax:'Min = Max → every team gets exactly {n} (raise “Max” to randomise)',
+    pickedCopied:'Picked team copied ✓'
   }
 };
 let LANG = 'zh';
@@ -325,9 +333,10 @@ function run(newSeed, keepChosen){
   const must = TeamSolver.parsePairs(els.must.value, LANG);
   const rep = TeamSolver.parseRepeat(els.repeat.value, LANG);
   const randomSizes = els.sizeMode.value === 'random';
-  const maxPer = parseInt(els.maxPer.value, 10) || 0;
-  const sizeMin = Math.max(1, parseInt(els.sizeMin.value, 10) || 1);
-  const sizeMax = randomSizes ? Math.max(sizeMin, maxPer || 10) : 0;
+  const range = TeamSolver.normalizeRange(els.sizeMin.value, els.maxPer.value);
+  const maxPer = range.max;
+  const sizeMin = range.min;
+  const sizeMax = randomSizes ? range.max : 0;
   let teamCount = parseInt(els.teams.value, 10) || 0;
   const autoTeamCount = !teamCount;
   if(!teamCount) teamCount = TeamSolver.autoTeams(parsed.people.length, sizeMax || maxPer);
@@ -351,6 +360,11 @@ function run(newSeed, keepChosen){
   });
   res.warnings = parsed.warnings.concat(cannot.warnings, must.warnings, rep.warnings, res.warnings);
   if(!els.people.value.trim()) res.warnings.unshift(t('emptyListNote'));
+  if(randomSizes){
+    if(range.note === 'blank') res.warnings.unshift(t('sizeMaxBlank', {n: range.max}));
+    else if(range.note === 'clamped') res.warnings.unshift(t('sizeMaxTooSmall', {n: range.max}));
+    if(range.fixed) res.warnings.unshift(t('sizeMinEqMax', {n: range.max}));
+  }
   if(autoTeamCount && parsed.people.length) res.warnings.unshift(t('autoTeams', {n:teamCount}));
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(t('solved', {ms:ms, s:seed}));
@@ -366,7 +380,13 @@ els.reroll.addEventListener('click', () => run(true));
 [els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance].forEach(el => {
   el.addEventListener('input', save); el.addEventListener('change', save);
 });
-els.sizeMode.addEventListener('change', () => { updateSizeMode(); save(); });
+els.sizeMode.addEventListener('change', () => {
+  // Switching to random mode: make the upper bound visible instead of defaulting to a hidden number.
+  if(els.sizeMode.value === 'random' && !(parseInt(els.maxPer.value, 10) > 0)){
+    els.maxPer.value = Math.max(1, parseInt(els.sizeMin.value, 10) || 1);
+  }
+  updateSizeMode(); save();
+});
 els.langZh.addEventListener('click', () => switchLang('zh'));
 els.langEn.addEventListener('click', () => switchLang('en'));
 function switchLang(l){
@@ -388,7 +408,7 @@ els.copyTeam.addEventListener('click', async () => {
   const tm = res.teams[chosen];
   const txt = `${t('teamWord')} ${LETTERS[chosen] || '#'+(chosen+1)} (${tm.count} ${t('membersWord', {w:tm.weight})})\n` +
     tm.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : ' [×'+m.repeat+']') : ''}`).join('\n');
-  try{ await navigator.clipboard.writeText(txt); els.chosenInfo.textContent = t('copied'); }
+  try{ await navigator.clipboard.writeText(txt); els.chosenInfo.textContent = t('pickedCopied'); }
   catch(e){ els.status.insertAdjacentHTML('afterbegin', `<div class="warn">${t('copyFail')}</div>`); }
 });
 els.results.addEventListener('click', e => {
