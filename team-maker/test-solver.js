@@ -205,5 +205,35 @@ console.log('\n[12] names may be left off the list (seats only)');
   check('only real names are placed', partial.teams.reduce((s, t) => s + t.count, 0) === 3, partial.teams.map(t => t.count));
 }
 
+console.log('\n[13] random team sizes (每隊人數隨機 1–10)');
+{
+  const people = S.parsePeople(Array.from({ length: 24 }, (_, i) => 'P' + (i + 1)).join('\n')).people;
+  const res = S.solve({ people, teams: 6, sizeMin: 1, sizeMax: 10, seed: 99 });
+  check('caps returned per team', !!res.caps && res.caps.length === 6, res.caps);
+  check('every size within 1–10', res.caps.every(c => c >= 1 && c <= 10), res.caps);
+  check('sizes really vary (random)', new Set(res.caps).size > 1, res.caps);
+  check('total capacity covers everybody', res.caps.reduce((s, c) => s + c, 0) >= 24, res.caps);
+  check('each team within its own cap', res.teams.every((t, i) => t.count <= res.caps[i]), res.teams.map((t, i) => t.count + '/' + res.caps[i]));
+  check('all 24 placed exactly once', res.teams.reduce((s, t) => s + t.count, 0) === 24);
+  check('sizeRange echoed back', !!res.sizeRange && res.sizeRange.min === 1 && res.sizeRange.max === 10, res.sizeRange);
+  check('no overflow warning when it fits', !res.warnings.some(w => w.includes('超出')), res.warnings);
+  check('same seed → same sizes',
+    JSON.stringify(S.solve({ people, teams: 6, sizeMin: 1, sizeMax: 10, seed: 99 }).caps) === JSON.stringify(res.caps));
+  console.log('     random sizes:', JSON.stringify(res.caps), 'total', res.caps.reduce((s, c) => s + c, 0));
+
+  const tight = S.solve({ people, teams: 2, sizeMin: 1, sizeMax: 3, seed: 1 });
+  check('warns when 24 people cannot fit in 2×3', tight.warnings.some(w => w.includes('唔夠放') || w.includes('超出')), tight.warnings);
+
+  const seats = S.solve({ people: [], teams: 4, sizeMin: 2, sizeMax: 6, seed: 3 });
+  check('empty list still gets random seat sizes', seats.teams.length === 4 && seats.caps.every(c => c >= 2 && c <= 6), seats.caps);
+
+  const withCoach = S.solve({
+    people: S.parsePeople('A\nB\nC\nD\nE\nF\nG\nH\n教練').people,
+    teams: 3, sizeMin: 3, sizeMax: 4, repeat: S.parseRepeat('教練').items, seed: 8
+  });
+  check('every-team member counted against random caps',
+    withCoach.teams.every((t, i) => t.count <= withCoach.caps[i]), withCoach.teams.map((t, i) => t.count + '/' + withCoach.caps[i]));
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

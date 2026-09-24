@@ -120,6 +120,12 @@
     var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
     var balance = opts.balance !== false;
     var maxPerTeam = Math.max(0, parseInt(opts.maxPerTeam, 10) || 0);
+    var sizeRange = null;
+    if (parseInt(opts.sizeMax, 10) > 0) {
+      var sMin = Math.max(1, parseInt(opts.sizeMin, 10) || 1);
+      var sMax = Math.max(sMin, parseInt(opts.sizeMax, 10) || sMin);
+      sizeRange = { min: sMin, max: sMax };
+    }
     var seed = (parseInt(opts.seed, 10) || 1) >>> 0;
     var people = (opts.people || []).slice();
     var warnings = [];
@@ -129,9 +135,18 @@
 
     if (people.length === 0) {
       // No names at all: still lay out the teams so the empty seats can be planned/filled in later.
+      var seatCaps = null;
+      if (sizeRange) {
+        var sr = makeRng((seed ^ 0x5bf03635) >>> 0);
+        seatCaps = [];
+        for (var sc = 0; sc < T; sc++) seatCaps.push(sizeRange.min + Math.floor(sr() * (sizeRange.max - sizeRange.min + 1)));
+      } else if (maxPerTeam > 0) {
+        seatCaps = [];
+        for (var sc2 = 0; sc2 < T; sc2++) seatCaps.push(maxPerTeam);
+      }
       var seatTeams = [];
-      for (var s0 = 0; s0 < T; s0++) seatTeams.push({ id: s0, members: [], count: 0, weight: 0 });
-      return { teams: seatTeams, repeats: [], violations: [], conflicts: [], warnings: [], imbalance: 0, maxPerTeam: maxPerTeam, ok: true };
+      for (var s0 = 0; s0 < T; s0++) seatTeams.push({ id: s0, members: [], count: 0, weight: 0, cap: seatCaps ? seatCaps[s0] : 0 });
+      return { teams: seatTeams, repeats: [], violations: [], conflicts: [], warnings: [], imbalance: 0, maxPerTeam: maxPerTeam, caps: seatCaps, sizeRange: sizeRange, ok: true };
     }
 
     /* ---- split repeatable people out of the core ---- */
@@ -262,6 +277,33 @@
     var maxRepeat = 0;
     repeatList.forEach(function (k) { var m = repeatOf[k].max; if (m > maxRepeat) maxRepeat = m; });
 
+    /* ---- per-team capacities: a fixed cap, or a random size in [min,max] ---- */
+    var caps = null;
+    if (sizeRange) {
+      var needed = core.length;
+      repeatList.forEach(function (k) { var s = repeatOf[k]; needed += (s.max === 0 ? T : s.max); });
+      var capsRng = makeRng((seed ^ 0x5bf03635) >>> 0);
+      caps = [];
+      for (var ci = 0; ci < T; ci++) {
+        caps.push(sizeRange.min + Math.floor(capsRng() * (sizeRange.max - sizeRange.min + 1)));
+      }
+      var capTotal = 0, gi;
+      for (gi = 0; gi < T; gi++) capTotal += caps[gi];
+      var guard = 0;
+      while (capTotal < needed && guard++ < 20000) {
+        var grow = -1;
+        for (gi = 0; gi < T; gi++) if (caps[gi] < sizeRange.max && (grow === -1 || caps[gi] < caps[grow])) grow = gi;
+        if (grow === -1) break;
+        caps[grow]++; capTotal++;
+      }
+      if (capTotal < needed) {
+        warnings.push('每隊最多 ' + sizeRange.max + ' 人 × ' + T + ' 隊 = ' + capTotal + ' 個位，唔夠放 ' + needed + ' 人 —— 加隊數或者提高上限');
+      }
+    } else if (maxPerTeam > 0) {
+      caps = [];
+      for (var ci2 = 0; ci2 < T; ci2++) caps.push(maxPerTeam);
+    }
+
     /* ---- cost ---- */
     function costOf(teamOf, repTeams) {
       var loads = new Array(T).fill(0), counts = new Array(T).fill(0);
@@ -315,8 +357,8 @@
         for (t = 0; t < T; t++) { var dc = counts[t] - cmean; imbalance += dc * dc * 0.01; }
       }
       var overflow = 0;
-      if (maxPerTeam > 0) {
-        for (t = 0; t < T; t++) if (counts[t] > maxPerTeam) overflow += counts[t] - maxPerTeam;
+      if (caps) {
+        for (t = 0; t < T; t++) if (counts[t] > caps[t]) overflow += counts[t] - caps[t];
       }
       return { score: violations.length * 1e6 + overflow * 1e4 + imbalance, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow };
     }
@@ -386,7 +428,7 @@
 
     /* ---- build output ---- */
     var teams = [];
-    for (var t2 = 0; t2 < T; t2++) teams.push({ id: t2, members: [], weight: 0 });
+    for (var t2 = 0; t2 < T; t2++) teams.push({ id: t2, members: [], weight: 0, cap: caps ? caps[t2] : 0 });
     blocks.forEach(function (_, b) {
       var t3 = bestTeamOf[b];
       if (t3 < 0 || t3 >= T) t3 = 0;
@@ -413,14 +455,16 @@
     if (best.violations.length) {
       warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然有重疊（規則太多／衝突，冇完美解）');
     }
-    if (maxPerTeam > 0 && best.overflow > 0) {
-      warnings.push('有 ' + best.overflow + ' 個人超出「每隊最多 ' + maxPerTeam + ' 人」—— 隊數唔夠，加多幾隊或者提高上限');
+    if (caps && best.overflow > 0) {
+      warnings.push('有 ' + best.overflow + ' 個人超出每隊人數上限 —— 隊數唔夠，加多幾隊或者提高上限');
     }
 
     return {
       teams: teams,
       repeats: repeats,
       maxPerTeam: maxPerTeam,
+      caps: caps,
+      sizeRange: sizeRange,
       violations: best.violations,
       conflicts: conflicts,
       warnings: warnings,
