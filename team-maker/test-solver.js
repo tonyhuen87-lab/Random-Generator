@@ -391,5 +391,30 @@ console.log('\n[20] repeatable members must count toward the per-team cap');
   check('and the over-cap team is marked (count > cap)', tight.teams.some((t, i) => t.count > tight.caps[i]), tight.teams.map((t, i) => t.count + '/' + tight.caps[i]));
 }
 
+console.log('\n[21] planTeams: you can always shrink the team count back');
+{
+  const a = S.planTeams({ pinned: 3, cap: 5, core: 20, repeats: [], autoGrow: true });
+  check('autoGrow on → grown to fit the cap', a.teams === 4 && a.grew === true && a.ok === true, a);
+  const b = S.planTeams({ pinned: 3, cap: 5, core: 20, repeats: [], autoGrow: false });
+  check('autoGrow off → your 3 teams win (shrink works)', b.teams === 3 && b.grew === false && b.ok === false, b);
+  check('and it reports the minimum needed (4)', b.minRequired === 4, b.minRequired);
+
+  const c = S.planTeams({ pinned: 2, cap: 5, core: 10, repeats: [], autoGrow: true });
+  check('shrink to a count that still fits → honoured as-is', c.teams === 2 && c.grew === false && c.ok === true, c);
+  const d = S.planTeams({ pinned: 0, cap: 5, core: 20, repeats: [], autoGrow: true });
+  check('pinned 0 → auto count', d.teams === 4 && d.pinned === 0, d);
+
+  const e1 = S.planTeams({ pinned: 5, cap: 5, core: 25, repeats: [], autoGrow: true });
+  const e2 = S.planTeams({ pinned: 2, cap: 5, core: 10, repeats: [], autoGrow: true });
+  check('5 teams then 2 teams → really 2 (nothing sticky)', e1.teams === 5 && e2.teams === 2, [e1.teams, e2.teams]);
+
+  const f = S.planTeams({ pinned: 3, cap: 5, core: 20, repeats: [{ teams: 0 }], autoGrow: true });
+  check('repeatable members are counted while planning (5 teams)', f.teams === 5, f);
+  const g = S.planTeams({ pinned: 9, cap: 0, core: 20, repeats: [], autoGrow: true });
+  check('no cap → your count is kept exactly', g.teams === 9 && g.minRequired === 0, g);
+  const h = S.planTeams({ pinned: 1, cap: 5, core: 25, repeats: [], autoGrow: true });
+  check('grow respects the 20-team ceiling', h.teams === 5, h);
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

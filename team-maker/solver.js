@@ -587,5 +587,29 @@
     return need;
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded, neededSeats: neededSeats };
+  // Decide the final team count. `pinned` = the number the user typed (0 = auto).
+  // autoGrow ON  → a hard per-team cap wins, so teams are added until everyone fits.
+  // autoGrow OFF → the user's team count always wins, even if that breaks the cap.
+  function planTeams(opts) {
+    opts = opts || {};
+    var pinned = parseInt(opts.pinned, 10) || 0;
+    var cap = parseInt(opts.cap, 10) || 0;
+    var core = Math.max(0, parseInt(opts.core, 10) || 0);
+    var reps = opts.repeats || [];
+    var autoGrow = opts.autoGrow !== false;
+    var T = pinned > 0 ? Math.max(1, Math.min(20, pinned)) : autoTeams(core, cap);
+    var started = T;
+    if (cap > 0 && autoGrow) {
+      for (var i = 0; i < 8; i++) {
+        var need = neededSeats(core, reps, T);
+        var fit = teamsNeeded(need, cap);
+        if (fit <= T) break;
+        T = fit;
+      }
+    }
+    var minRequired = cap > 0 ? teamsNeeded(neededSeats(core, reps, T), cap) : 0;
+    return { teams: T, pinned: pinned, cap: cap, grew: T > started, minRequired: minRequired, ok: cap <= 0 || T >= minRequired };
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded, neededSeats: neededSeats, planTeams: planTeams };
 });

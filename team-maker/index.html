@@ -120,6 +120,7 @@
   </div>
   <div class="row">
     <label class="switch"><input type="checkbox" id="balance" checked> <span data-i18n="lblBalance"></span></label>
+    <label class="switch"><input type="checkbox" id="autoGrow" checked> <span data-i18n="lblAutoGrow"></span></label>
   </div>
   <div class="hint" data-i18n="hint"></div>
 </div>
@@ -148,12 +149,12 @@ const LS = 'teamMaker.v1';
 const els = {
   people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), teams:$('teams'), maxPer:$('maxPer'), seed:$('seed'),
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
-  balance:$('balance'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
+  balance:$('balance'), autoGrow:$('autoGrow'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v9';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v10';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -177,6 +178,7 @@ const DICT = {
     lblMaxPer:'每隊最多 <span class="tag">0＝不限</span>',
     lblMaxPerRandom:'每隊最多（隨機上限；留空＝同最少一樣）',
     lblBalance:'平均分配權重',
+    lblAutoGrow:'唔夠位自動加隊',
     hint:'規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。',
     btnGo:'分隊！', btnReroll:'重新抽（換 seed）', btnCopy:'複製結果', btnDemo:'載入示範',
     btnPick:'揀', btnPicked:'✓ 已揀', btnPickRandom:'🎲 隨機揀一隊', btnCopyTeam:'複製揀咗嗰隊',
@@ -198,7 +200,8 @@ const DICT = {
     sizeMaxTooSmall:'「最少」大過「最多」→ 已把「最少」降到 {n}（以「最多」為準，保證唔會超）',
     sizeMinEqMax:'最少＝最多 → 每隊固定 {n} 人（想隨機就加大「最多」）',
     pickedCopied:'已複製揀嘅隊 ✓',
-    autoGrew:'唔夠位 → 已自動加至 {n} 隊（每隊最多 {cap} 人）',
+    autoGrew:'唔夠位 → 已自動加至 {n} 隊（每隊最多 {cap} 人）；想硬用你指定嘅隊數就熄「自動加隊」',
+    capBreak:'隊數唔夠：要 {need} 隊才唔超上限 {cap}，但你要 {n} 隊 → 有隊會超（會標紅色）',
     capHard:'每隊最多 {cap} 人（硬性）'
   },
   en: {
@@ -221,6 +224,7 @@ const DICT = {
     lblMaxPer:'Max per team <span class="tag">0 = no limit</span>',
     lblMaxPerRandom:'Max per team (upper bound; blank = same as min)',
     lblBalance:'Balance total weight',
+    lblAutoGrow:'Auto-add teams when needed',
     hint:'Rules: <code>!</code>, <code>×</code> or <code>,</code> means “keep apart”; <code>+</code> means “keep together”. Names must match the list above.<br>Want <b>3 people (or more) all in different teams</b>? Put them on one line — <code>X ! Y ! Z</code> (auto-expands to every pair).<br>Repeatable column: <code>Coach</code> = in every team; <code>Helper 2</code> = in up to 2 teams (picks the teams that need it most). “Every team” members are excluded from weight balancing.<br>You don’t have to fill the list — once a per-team size is set, the leftover places show as “empty” seats you can fill later.',
     btnGo:'Build teams!', btnReroll:'Re-roll (new seed)', btnCopy:'Copy result', btnDemo:'Load demo',
     btnPick:'Pick', btnPicked:'✓ Picked', btnPickRandom:'🎲 Pick a random team', btnCopyTeam:'Copy picked team',
@@ -242,7 +246,8 @@ const DICT = {
     sizeMaxTooSmall:'“Min” was above “Max” → “Min” lowered to {n} (the Max always wins)',
     sizeMinEqMax:'Min = Max → every team gets exactly {n} (raise “Max” to randomise)',
     pickedCopied:'Picked team copied ✓',
-    autoGrew:'Not enough seats → auto-raised to {n} teams (max {cap} per team)',
+    autoGrew:'Not enough seats → auto-raised to {n} teams (max {cap} per team); turn off “Auto-add teams” to force your own count',
+    capBreak:'Not enough teams: {need} needed to respect a max of {cap}, but you asked for {n} → some teams will go over (shown in red)',
     capHard:'max {cap} per team (hard limit)'
   }
 };
@@ -260,7 +265,7 @@ function save(){
     localStorage.setItem(LS, JSON.stringify({
       people:els.people.value, cannot:els.cannot.value, must:els.must.value, repeat:els.repeat.value,
       teams:els.teams.value, maxPer:els.maxPer.value, seed:els.seed.value, balance:els.balance.checked,
-      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG
+      sizeMode:els.sizeMode.value, sizeMin:els.sizeMin.value, lang:LANG, autoGrow:els.autoGrow.checked
     }));
   }catch(e){}
 }
@@ -277,6 +282,7 @@ function load(){
     if(s.sizeMin !== undefined) els.sizeMin.value = s.sizeMin;
     if(s.seed) els.seed.value = s.seed;
     if(typeof s.balance === 'boolean') els.balance.checked = s.balance;
+    if(typeof s.autoGrow === 'boolean') els.autoGrow.checked = s.autoGrow;
   }catch(e){}
 }
 
@@ -357,23 +363,18 @@ function run(newSeed, keepChosen){
   const maxPer = randomSizes ? range.max : TeamSolver.parseCap(els.maxPer.value);
   const sizeMin = randomSizes ? range.min : 1;
   const sizeMax = randomSizes ? range.max : 0;
-  let teamCount = parseInt(els.teams.value, 10) || 0;
-  const autoTeamCount = !teamCount;
   const perTeamCap = randomSizes ? range.max : maxPer;
-  let grewFrom = 0;
-  if(!teamCount) teamCount = TeamSolver.autoTeams(parsed.people.length, perTeamCap);
-  if(perTeamCap > 0){
-    // A per-team limit is a hard constraint. Repeatable members eat a seat too, and
-    // adding teams changes how many seats they eat, so iterate until it fits.
-    const started = teamCount;
-    for(let i = 0; i < 6; i++){
-      const need = TeamSolver.neededSeats(parsed.people.length, rep.items, teamCount);
-      const fit = TeamSolver.teamsNeeded(need, perTeamCap);
-      if(fit <= teamCount) break;
-      teamCount = fit;
-    }
-    if(teamCount > started) grewFrom = started;
-  }
+  const pinned = parseInt(els.teams.value, 10) || 0;
+  // planTeams settles the final count: auto-grow on → the cap wins; off → your number wins
+  // (so lowering the team count always shrinks back).
+  const plan = TeamSolver.planTeams({
+    pinned: pinned,
+    cap: perTeamCap,
+    core: parsed.people.length,
+    repeats: rep.items,
+    autoGrow: els.autoGrow.checked
+  });
+  let teamCount = plan.teams;
   let seed = parseInt(els.seed.value, 10);
   if(newSeed || !seed){ seed = Math.floor(Math.random() * 999999) + 1; els.seed.value = seed; }
   const t0 = performance.now();
@@ -394,14 +395,15 @@ function run(newSeed, keepChosen){
   });
   res.warnings = parsed.warnings.concat(cannot.warnings, must.warnings, rep.warnings, res.warnings);
   if(!els.people.value.trim()) res.warnings.unshift(t('emptyListNote'));
-  if(grewFrom) res.warnings.unshift(t('autoGrew', {n: teamCount, cap: perTeamCap}));
+  if(plan.grew) res.warnings.unshift(t('autoGrew', {n: teamCount, cap: perTeamCap}));
+  else if(perTeamCap > 0 && !plan.ok) res.warnings.unshift(t('capBreak', {need: plan.minRequired, cap: perTeamCap, n: teamCount}));
   if(!randomSizes && perTeamCap > 0) res.warnings.unshift(t('capHard', {cap: perTeamCap}));
   if(randomSizes){
     if(range.note === 'blank') res.warnings.unshift(t('sizeMaxBlank', {n: range.max}));
     else if(range.note === 'minLowered') res.warnings.unshift(t('sizeMaxTooSmall', {n: range.max}));
     if(range.fixed) res.warnings.unshift(t('sizeMinEqMax', {n: range.max}));
   }
-  if(autoTeamCount && parsed.people.length) res.warnings.unshift(t('autoTeams', {n:teamCount}));
+  if(plan.pinned === 0 && parsed.people.length) res.warnings.unshift(t('autoTeams', {n: teamCount}));
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(t('solved', {ms:ms, s:seed}));
   if(!keepChosen) chosen = null;
@@ -414,7 +416,7 @@ function run(newSeed, keepChosen){
 /* ---------- events ---------- */
 els.go.addEventListener('click', () => run(false));
 els.reroll.addEventListener('click', () => run(true));
-[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance].forEach(el => {
+[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.sizeMin, els.seed, els.balance, els.autoGrow].forEach(el => {
   el.addEventListener('input', save); el.addEventListener('change', save);
 });
 els.sizeMode.addEventListener('change', () => {
