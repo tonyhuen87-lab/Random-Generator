@@ -283,5 +283,16 @@ console.log('\n[15] bilingual output (lang: "en" / default zh)');
     JSON.stringify(S.solve({ people, teams: 2, seed: 5 }).teams.map(t => t.members.map(m => m.name))));
 }
 
+console.log('\n[16] pick-a-team helper (後加嘅揀隊功能)');
+{
+  check('randomIndex(0) = -1', S.randomIndex(0) === -1, S.randomIndex(0));
+  const a = S.randomIndex(5, 42), b = S.randomIndex(5, 42);
+  check('same seed → same pick', a === b && a >= 0 && a < 5, [a, b]);
+  const many = Array.from({ length: 200 }, (_, i) => S.randomIndex(4, i + 1));
+  check('always inside 0..n-1', many.every(x => x >= 0 && x < 4), [...new Set(many)].sort());
+  check('can land on more than one team', new Set(many).size > 1, [...new Set(many)].sort());
+  check('no seed still returns a valid index', (() => { const x = S.randomIndex(3); return x >= 0 && x < 3; })());
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

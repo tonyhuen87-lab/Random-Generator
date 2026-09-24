@@ -532,6 +532,13 @@
     return Math.max(1, Math.min(20, Math.ceil((n || 1) / max)));
   }
 
+  // Pick one index 0..n-1. Same seed → same pick (handy for tests and re-rolls).
+  function randomIndex(n, seed) {
+    if (!(n > 0)) return -1;
+    var r = makeRng((parseInt(seed, 10) >>> 0) || (Date.now() & 0x7fffffff));
+    return Math.floor(r() * n);
+  }
+
   // repeatable people that are in EVERY team (used when there is no core list)
   function repeatEntryTeams(repeatList, repeatOf, T) {
     return repeatList.map(function (k) {
@@ -540,5 +547,5 @@
     });
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams };
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex };
 });

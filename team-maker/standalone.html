@@ -28,6 +28,9 @@
   h1 .lang{display:flex;gap:0;border:1px solid var(--accent);border-radius:999px;overflow:hidden;box-shadow:0 0 0 3px rgba(78,161,255,.12)}
   h1 .lang button{background:transparent;border:0;color:var(--fg);font-size:15px;font-weight:700;padding:8px 16px;border-radius:0}
   h1 .lang button.on{background:var(--accent);color:#04121f}
+  .team.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(78,161,255,.16)}
+  .pickbtn{background:var(--card2);border:1px solid var(--line);color:var(--dim);font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;cursor:pointer;white-space:nowrap}
+  .pickbtn.on{background:var(--accent);border-color:var(--accent);color:#04121f}
   .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
   label{display:block;font-size:13px;color:var(--dim);margin:0 0 6px}
   label .tag{color:var(--fg);font-size:12px;background:var(--card2);border-radius:6px;padding:1px 6px;margin-left:6px}
@@ -124,6 +127,11 @@
 </div>
 
 <div id="status" style="margin-top:14px"></div>
+<div class="row hidden" id="toolbar" style="margin:0 0 12px">
+  <button class="ghost" id="pickTeam" data-i18n="btnPickRandom"></button>
+  <button class="ghost" id="copyTeam" data-i18n="btnCopyTeam"></button>
+</div>
+<div class="good hidden" id="chosenInfo"></div>
 <div id="results"></div>
 
 <script>
@@ -661,6 +669,13 @@
     return Math.max(1, Math.min(20, Math.ceil((n || 1) / max)));
   }
 
+  // Pick one index 0..n-1. Same seed → same pick (handy for tests and re-rolls).
+  function randomIndex(n, seed) {
+    if (!(n > 0)) return -1;
+    var r = makeRng((parseInt(seed, 10) >>> 0) || (Date.now() & 0x7fffffff));
+    return Math.floor(r() * n);
+  }
+
   // repeatable people that are in EVERY team (used when there is no core list)
   function repeatEntryTeams(repeatList, repeatOf, T) {
     return repeatList.map(function (k) {
@@ -669,7 +684,7 @@
     });
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams };
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex };
 });
 
 </script>
@@ -680,7 +695,8 @@ const els = {
   people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), teams:$('teams'), maxPer:$('maxPer'), seed:$('seed'),
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
   balance:$('balance'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
-  results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn')
+  results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
+  toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
 
@@ -708,6 +724,8 @@ const DICT = {
     lblBalance:'平均分配權重',
     hint:'規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。',
     btnGo:'分隊！', btnReroll:'重新抽（換 seed）', btnCopy:'複製結果', btnDemo:'載入示範',
+    btnPick:'揀', btnPicked:'✓ 已揀', btnPickRandom:'🎲 隨機揀一隊', btnCopyTeam:'複製揀咗嗰隊',
+    chosenTitle:'已揀 {team} 隊（{n} 人）',
     okBanner:'✅ 全部規則滿足，{T} 隊、{N} 人',
     withRepeats:'（含 {k} 個可重複）',
     sizeRandom:' · 每隊人數隨機 {a}–{b}',
@@ -744,6 +762,8 @@ const DICT = {
     lblBalance:'Balance total weight',
     hint:'Rules: <code>!</code>, <code>×</code> or <code>,</code> means “keep apart”; <code>+</code> means “keep together”. Names must match the list above.<br>Want <b>3 people (or more) all in different teams</b>? Put them on one line — <code>X ! Y ! Z</code> (auto-expands to every pair).<br>Repeatable column: <code>Coach</code> = in every team; <code>Helper 2</code> = in up to 2 teams (picks the teams that need it most). “Every team” members are excluded from weight balancing.<br>You don’t have to fill the list — once a per-team size is set, the leftover places show as “empty” seats you can fill later.',
     btnGo:'Build teams!', btnReroll:'Re-roll (new seed)', btnCopy:'Copy result', btnDemo:'Load demo',
+    btnPick:'Pick', btnPicked:'✓ Picked', btnPickRandom:'🎲 Pick a random team', btnCopyTeam:'Copy picked team',
+    chosenTitle:'Picked: {team} ({n} members)',
     okBanner:'✅ All rules satisfied — {T} teams, {N} members',
     withRepeats:' ({k} repeatable)',
     sizeRandom:' · random team size {a}–{b}',
@@ -760,6 +780,7 @@ const DICT = {
   }
 };
 let LANG = 'zh';
+let chosen = null;   // index of the team the user picked, or null
 function t(key, params){
   let s = (DICT[LANG] && DICT[LANG][key]) || DICT.zh[key] || key;
   if(params) Object.keys(params).forEach(k => { s = s.split('{' + k + '}').join(params[k]); });
@@ -828,21 +849,30 @@ function render(res){
       els.status.insertAdjacentHTML('afterbegin', `<div class="good">${head}</div>`);
     }
     els.results.innerHTML = res.teams.map((t_,i) => `
-      <div class="team">
-        <h2>${t('teamWord')} ${LETTERS[i] || '#'+(i+1)} <em>${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})}</em></h2>
+      <div class="team${chosen === i ? ' sel' : ''}">
+        <h2><span>${t('teamWord')} ${LETTERS[i] || '#'+(i+1)}</span> <em>${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})}</em><button class="pickbtn${chosen === i ? ' on' : ''}" data-team="${i}" type="button">${chosen === i ? t('btnPicked') : t('btnPick')}</button></h2>
         <div class="bar"><i style="width:${Math.round(t_.weight/max*100)}%"></i></div>
         <ul class="members">
           ${t_.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? t('everyTeam') : '×' + m.repeat}</b>` : ''}</li>`).join('')}${caps && caps[i] ? Array.from({length: Math.max(0, caps[i] - t_.count)}, () => `<li class="seat">${t('seat')}</li>`).join('') : (t_.members.length ? '' : `<li style="color:var(--dim)">${t('empty')}</li>`)}
         </ul>
       </div>`).join('');
+    els.toolbar.classList.toggle('hidden', !res.teams.length);
+    if(chosen !== null && res.teams[chosen]){
+      els.chosenInfo.classList.remove('hidden');
+      els.chosenInfo.textContent = t('chosenTitle', {team: (LETTERS[chosen] || '#'+(chosen+1)), n: res.teams[chosen].count});
+    }else{
+      els.chosenInfo.classList.add('hidden');
+    }
   }else{
     els.results.innerHTML = '';
+    els.toolbar.classList.add('hidden');
+    els.chosenInfo.classList.add('hidden');
     els.status.insertAdjacentHTML('afterbegin', `<div class="warn">${t('needInput')}</div>`);
   }
 }
 
 /* ---------- run ---------- */
-function run(newSeed){
+function run(newSeed, keepChosen){
   const parsed = TeamSolver.parsePeople(els.people.value, LANG);
   const cannot = TeamSolver.parsePairs(els.cannot.value, LANG);
   const must = TeamSolver.parsePairs(els.must.value, LANG);
@@ -877,6 +907,7 @@ function run(newSeed){
   if(autoTeamCount && parsed.people.length) res.warnings.unshift(t('autoTeams', {n:teamCount}));
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(t('solved', {ms:ms, s:seed}));
+  if(!keepChosen) chosen = null;
   render(res);
   window.__last = res;
   save();
@@ -896,8 +927,30 @@ function switchLang(l){
   LANG = l;
   applyLang();
   save();
-  if(window.__last) run(false);            // re-solve so warnings come out in the new language
+  if(window.__last) run(false, true);      // re-solve so warnings come out in the new language
 }
+els.pickTeam.addEventListener('click', () => {
+  const res = window.__last;
+  if(!res || !res.teams.length) return;
+  chosen = TeamSolver.randomIndex(res.teams.length, Date.now() & 0x7fffffff);
+  render(res);
+});
+els.copyTeam.addEventListener('click', async () => {
+  const res = window.__last;
+  if(!res || chosen === null || !res.teams[chosen]) return;
+  const tm = res.teams[chosen];
+  const txt = `${t('teamWord')} ${LETTERS[chosen] || '#'+(chosen+1)} (${tm.count} ${t('membersWord', {w:tm.weight})})\n` +
+    tm.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : ' [×'+m.repeat+']') : ''}`).join('\n');
+  try{ await navigator.clipboard.writeText(txt); els.chosenInfo.textContent = t('copied'); }
+  catch(e){ els.status.insertAdjacentHTML('afterbegin', `<div class="warn">${t('copyFail')}</div>`); }
+});
+els.results.addEventListener('click', e => {
+  const b = e.target && e.target.closest ? e.target.closest('.pickbtn') : null;
+  if(!b) return;
+  const i = parseInt(b.getAttribute('data-team'), 10);
+  chosen = (chosen === i) ? null : i;
+  if(window.__last) render(window.__last);
+});
 els.copy.addEventListener('click', async () => {
   const res = window.__last; if(!res) return;
   const caps = res.caps || null;
