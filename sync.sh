@@ -28,11 +28,11 @@ cat > teams/index.html <<'HTML'
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="refresh" content="0; url=../team-maker/?v=7">
+<meta http-equiv="refresh" content="0; url=../team-maker/">
 <title>Teams · 分隊</title>
 </head>
 <body style="background:#0b0f14;color:#e8eef5;font:16px system-ui;padding:24px">
-<p>Loading the newest build… <a style="color:#4ea1ff" href="../team-maker/?v=7">tap here</a></p>
+<p>Loading the newest build… <a style="color:#4ea1ff" href="../team-maker/">tap here</a></p>
 </body>
 </html>
 HTML

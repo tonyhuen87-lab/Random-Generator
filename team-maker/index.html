@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Teams">
 <meta name="theme-color" content="#0b0f14">
+<meta name="app-version" content="v15">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -143,7 +144,7 @@
 <div class="good hidden" id="chosenInfo"></div>
 <div id="results"></div>
 
-<div class="ver" id="ver"></div>
+<div id="results"></div>
 
 <script src="solver.js"></script>
 <script>
@@ -154,10 +155,10 @@ const els = {
   sizeMode:$('sizeMode'), sizeMin:$('sizeMin'), maxPerLabel:$('maxPerLabel'), sizeMinWrap:$('sizeMinWrap'),
   balance:$('balance'), autoGrow:$('autoGrow'), randomPick:$('randomPick'), fillSeats:$('fillSeats'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status'), langZh:$('langZh'), langEn:$('langEn'),
-  toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
+  toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v14';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v15';   // kept in <meta name="app-version"> for deploy checks — not shown on screen
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -301,13 +302,6 @@ function updateSizeMode(){
   const r = els.sizeMode.value === 'random';
   els.sizeMinWrap.classList.toggle('hidden', !r);
   els.maxPerLabel.innerHTML = t(r ? 'lblMaxPerRandom' : 'lblMaxPer');
-  updateVer();
-}
-
-function updateVer(){
-  const rnd = els.sizeMode.value === 'random';
-  const rg = TeamSolver.normalizeRange(els.sizeMin.value, els.maxPer.value);
-  els.ver.textContent = VERSION + ' · ' + (rnd ? ('random ' + rg.min + '–' + rg.max) : ('max ' + (TeamSolver.parseCap(els.maxPer.value) || '∞')));
 }
 
 function applyLang(){
@@ -431,7 +425,6 @@ function run(newSeed, keepChosen){
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(t('solved', {ms:ms, s:seed}));
   if(!keepChosen) chosen = null;
-  updateVer();
   render(res);
   window.__last = res;
   save();
@@ -511,7 +504,6 @@ els.demo.addEventListener('click', () => {
 
 load();
 applyLang();
-updateVer();
 if(!els.people.value) els.status.innerHTML = `<div class="hint">${t('idle')}</div>`;
 </script>
 </body>
