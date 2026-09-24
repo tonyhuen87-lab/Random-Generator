@@ -51,6 +51,7 @@
   .members li{background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:6px 11px;font-size:14px}
   .members li b{color:var(--accent);font-weight:600;font-size:12px;margin-left:5px}
   .members li.rep{border-color:#2b6b47;background:linear-gradient(180deg,#12291d,#141b23)}
+  .members li.seat{border-style:dashed;background:transparent;color:var(--dim)}
   .members li b.repb{color:var(--ok)}
   .bar{height:6px;border-radius:3px;background:var(--card2);overflow:hidden;margin-top:10px}
   .bar i{display:block;height:100%;background:var(--accent)}
@@ -73,11 +74,15 @@
   <label style="margin-top:12px">可以重複（跨隊） <span class="tag">名字 ＝ 每隊都有　·　名字 2 ＝ 最多 2 隊</span></label>
   <textarea id="repeat" class="rule" spellcheck="false" placeholder="陳教練&#10;助手 2"></textarea>
   <div class="row">
-    <div style="flex:1 1 110px">
-      <label>隊數</label>
-      <input type="number" id="teams" value="3" min="2" max="20" step="1">
+    <div style="flex:1 1 100px">
+      <label>隊數 <span class="tag">留空＝自動</span></label>
+      <input type="number" id="teams" value="3" min="0" max="20" step="1">
     </div>
-    <div style="flex:1 1 110px">
+    <div style="flex:1 1 100px">
+      <label>每隊最多 <span class="tag">0＝不限</span></label>
+      <input type="number" id="maxPer" value="0" min="0" max="99" step="1">
+    </div>
+    <div style="flex:1 1 100px">
       <label>種子（同一個＝同一個結果）</label>
       <input type="number" id="seed" min="1" step="1" placeholder="隨機">
     </div>
@@ -85,7 +90,7 @@
   <div class="row">
     <label class="switch"><input type="checkbox" id="balance" checked> 平均分配權重</label>
   </div>
-  <div class="hint">規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。</div>
+  <div class="hint">規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。</div>
 </div>
 
 <button class="primary" id="go">分隊！</button>
@@ -103,7 +108,7 @@
 const $ = id => document.getElementById(id);
 const LS = 'teamMaker.v1';
 const els = {
-  people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), teams:$('teams'), seed:$('seed'),
+  people:$('people'), cannot:$('cannot'), must:$('must'), repeat:$('repeat'), teams:$('teams'), maxPer:$('maxPer'), seed:$('seed'),
   balance:$('balance'), go:$('go'), reroll:$('reroll'), copy:$('copy'), demo:$('demo'),
   results:$('results'), status:$('status')
 };
@@ -114,7 +119,7 @@ function save(){
   try{
     localStorage.setItem(LS, JSON.stringify({
       people:els.people.value, cannot:els.cannot.value, must:els.must.value, repeat:els.repeat.value,
-      teams:els.teams.value, seed:els.seed.value, balance:els.balance.checked
+      teams:els.teams.value, maxPer:els.maxPer.value, seed:els.seed.value, balance:els.balance.checked
     }));
   }catch(e){}
 }
@@ -123,7 +128,8 @@ function load(){
     const s = JSON.parse(localStorage.getItem(LS) || 'null'); if(!s) return;
     els.people.value = s.people || ''; els.cannot.value = s.cannot || ''; els.must.value = s.must || '';
     els.repeat.value = s.repeat || '';
-    if(s.teams) els.teams.value = s.teams;
+    if(s.teams !== undefined) els.teams.value = s.teams;
+    if(s.maxPer !== undefined) els.maxPer.value = s.maxPer;
     if(s.seed) els.seed.value = s.seed;
     if(typeof s.balance === 'boolean') els.balance.checked = s.balance;
   }catch(e){}
@@ -140,24 +146,25 @@ function render(res){
     els.status.innerHTML = '';
   }
   const n = res.teams.reduce((s,t) => s + t.members.length, 0);
-  if(n){
+  const maxPer = res.maxPerTeam || 0;
+  if(n || maxPer){
     const max = Math.max(...res.teams.map(t => t.weight)) || 1;
     const nRep = (res.repeats || []).length;
     const head = res.ok
-      ? `<div class="good">✅ 全部規則滿足，${res.teams.length} 隊、${n} 人${nRep ? `（含 ${nRep} 個可重複）` : ''}</div>`
+      ? `<div class="good">✅ 全部規則滿足，${res.teams.length} 隊、${n} 人${nRep ? `（含 ${nRep} 個可重複）` : ''}${maxPer ? ` · 每隊上限 ${maxPer}` : ''}</div>`
       : '';
     els.status.insertAdjacentHTML('afterbegin', head);
     els.results.innerHTML = res.teams.map((t,i) => `
       <div class="team">
-        <h2>${LETTERS[i] || '#'+(i+1)} 隊 <em>${t.count} 人 · 總權重 ${t.weight}</em></h2>
+        <h2>${LETTERS[i] || '#'+(i+1)} 隊 <em>${t.count}${maxPer ? '/'+maxPer : ''} 人 · 總權重 ${t.weight}</em></h2>
         <div class="bar"><i style="width:${Math.round(t.weight/max*100)}%"></i></div>
         <ul class="members">
-          ${t.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? '每隊' : '×' + m.repeat}</b>` : ''}</li>`).join('') || '<li style="color:var(--dim)">（空）</li>'}
+          ${t.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? '每隊' : '×' + m.repeat}</b>` : ''}</li>`).join('')}${maxPer ? Array.from({length: Math.max(0, maxPer - t.count)}, () => '<li class="seat">空位</li>').join('') : (t.members.length ? '' : '<li style="color:var(--dim)">（空）</li>')}
         </ul>
       </div>`).join('');
   }else{
     els.results.innerHTML = '';
-    els.status.insertAdjacentHTML('afterbegin', `<div class="warn">名單係空嘅 — 先輸入名字。</div>`);
+    els.status.insertAdjacentHTML('afterbegin', `<div class="warn">先輸入名單；或者設定「每隊最多」即可以淨係排空位。</div>`);
   }
 }
 
@@ -167,12 +174,17 @@ function run(newSeed){
   const cannot = TeamSolver.parsePairs(els.cannot.value);
   const must = TeamSolver.parsePairs(els.must.value);
   const rep = TeamSolver.parseRepeat(els.repeat.value);
+  const maxPer = parseInt(els.maxPer.value, 10) || 0;
+  let teamCount = parseInt(els.teams.value, 10) || 0;
+  const autoTeamCount = !teamCount;
+  if(!teamCount) teamCount = TeamSolver.autoTeams(parsed.people.length, maxPer);
   let seed = parseInt(els.seed.value, 10);
   if(newSeed || !seed){ seed = Math.floor(Math.random() * 999999) + 1; els.seed.value = seed; }
   const t0 = performance.now();
   const res = TeamSolver.solve({
     people: parsed.people,
-    teams: parseInt(els.teams.value, 10) || 2,
+    teams: teamCount,
+    maxPerTeam: maxPer,
     cannotPairs: cannot.pairs,
     mustPairs: must.pairs,
     repeat: rep.items,
@@ -182,6 +194,8 @@ function run(newSeed){
     restarts: 12
   });
   res.warnings = parsed.warnings.concat(cannot.warnings, must.warnings, rep.warnings, res.warnings);
+  if(!els.people.value.trim()) res.warnings.unshift('名單係空嘅 —— 可以淨係排空位，之後再填名。');
+  if(autoTeamCount && parsed.people.length) res.warnings.unshift('隊數留空 → 自動用 ' + teamCount + ' 隊');
   const ms = Math.round(performance.now() - t0);
   if(res.teams.length) res.warnings.push(`（用 ${ms}ms 搜完，seed ${seed}）`);
   render(res);
@@ -191,13 +205,15 @@ function run(newSeed){
 
 els.go.addEventListener('click', () => run(false));
 els.reroll.addEventListener('click', () => run(true));
-[els.people, els.cannot, els.must, els.repeat, els.teams, els.seed, els.balance].forEach(el => {
+[els.people, els.cannot, els.must, els.repeat, els.teams, els.maxPer, els.seed, els.balance].forEach(el => {
   el.addEventListener('input', save); el.addEventListener('change', save);
 });
 els.copy.addEventListener('click', async () => {
   const res = window.__last; if(!res) return;
+  const maxPer = res.maxPerTeam || 0;
   const txt = res.teams.map((t,i) =>
-    `${LETTERS[i] || '#'+(i+1)} 隊（${t.count} 人 · 總權重 ${t.weight}）\n` +
+    `${LETTERS[i] || '#'+(i+1)} 隊（${t.count}${maxPer ? '/'+maxPer : ''} 人 · 總權重 ${t.weight}）` +
+    (maxPer && maxPer > t.count ? `〔空位 ${maxPer - t.count}〕` : '') + '\n' +
     t.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ' [每隊]' : ' [×'+m.repeat+']') : ''}`).join('\n')
   ).join('\n\n');
   try{ await navigator.clipboard.writeText(txt); els.go.textContent = '已複製 ✓'; setTimeout(()=>els.go.textContent='分隊！', 1200); }
@@ -209,6 +225,7 @@ els.demo.addEventListener('click', () => {
   els.must.value = '李小明 + 王五';
   els.repeat.value = '陳教練\n助手A 2';
   els.teams.value = 3;
+  els.maxPer.value = 6;
   run(true);
 });
 

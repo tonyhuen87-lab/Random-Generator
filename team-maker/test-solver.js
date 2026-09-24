@@ -90,7 +90,8 @@ console.log('\n[6] bad input handling');
   check('malformed rule warned at parse time', pairs.warnings.some(w => w.includes('格式')), pairs.warnings);
   check('name containing x not split', S.parsePairs('x + y').pairs.length === 1, S.parsePairs('x + y').pairs);
   const empty = S.solve({ people: [], teams: 2 });
-  check('empty list handled', empty.ok === false && empty.teams.length === 0);
+  check('empty list now returns an empty seat layout', empty.ok === true && empty.teams.length === 2 && empty.warnings.length === 0,
+    { ok: empty.ok, teams: empty.teams.length, warnings: empty.warnings });
 }
 
 console.log('\n[7] weight parsing variants');
@@ -161,6 +162,47 @@ console.log('\n[10] repeat + rule edge cases');
   check('unknown repeat name warned', bad.warnings.some(w => w.includes('唔喺名單')), bad.warnings);
   const maxed = S.solve({ people, teams: 2, repeat: S.parseRepeat('Helper 9').items, seed: 1 });
   check('max > team count becomes every team', maxed.teams.every(t => t.members.some(m => m.name === 'Helper')));
+}
+
+console.log('\n[11] max members per team (每隊最多)');
+{
+  const people = S.parsePeople('A\nB\nC\nD\nE\nF\nG\nH\nI').people;
+  const res = S.solve({ people, teams: 3, maxPerTeam: 3, seed: 5 });
+  check('every team within the cap', res.teams.every(t => t.count <= 3), res.teams.map(t => t.count));
+  check('all 9 placed', res.teams.reduce((s, t) => s + t.count, 0) === 9, res.teams.map(t => t.count));
+  check('no capacity warning when it fits', !res.warnings.some(w => w.includes('超出')), res.warnings);
+  check('maxPerTeam echoed back', res.maxPerTeam === 3, res.maxPerTeam);
+
+  const tight = S.solve({ people, teams: 2, maxPerTeam: 3, seed: 5 });
+  check('warns when 9 people cannot fit in 2x3', tight.warnings.some(w => w.includes('超出')), tight.warnings);
+  check('still places everyone when infeasible', tight.teams.reduce((s, t) => s + t.count, 0) === 9);
+
+  const withCoach = S.solve({
+    people: S.parsePeople('A\nB\nC\nD\nE\nF\n教練').people,
+    teams: 3, maxPerTeam: 3, repeat: S.parseRepeat('教練').items, seed: 7
+  });
+  check('every-team member counts toward the cap', withCoach.teams.every(t => t.count <= 3), withCoach.teams.map(t => t.count));
+  const tighter = S.solve({
+    people: S.parsePeople('A\nB\nC\nD\nE\nF\n教練').people,
+    teams: 3, maxPerTeam: 2, repeat: S.parseRepeat('教練').items, seed: 7
+  });
+  check('warns when the every-team member busts the cap', tighter.warnings.some(w => w.includes('超出')), tighter.warnings);
+}
+
+console.log('\n[12] names may be left off the list (seats only)');
+{
+  check('autoTeams(9,3) = 3', S.autoTeams(9, 3) === 3, S.autoTeams(9, 3));
+  check('autoTeams(10,3) = 4', S.autoTeams(10, 3) === 4, S.autoTeams(10, 3));
+  check('autoTeams(0,0) >= 2', S.autoTeams(0, 0) >= 2, S.autoTeams(0, 0));
+
+  const seats = S.solve({ people: [], teams: 4, maxPerTeam: 5, seed: 1 });
+  check('empty list still lays out 4 teams', seats.teams.length === 4, seats.teams.length);
+  check('teams are empty (no invented names)', seats.teams.every(t => t.members.length === 0));
+  check('ok = true and silent', seats.ok === true && seats.warnings.length === 0, seats.warnings);
+
+  const partial = S.solve({ people: S.parsePeople('Ann\nBen\nCal').people, teams: 3, maxPerTeam: 4, seed: 2 });
+  check('3 names into 3x4 keeps teams under cap', partial.teams.every(t => t.count <= 4));
+  check('only real names are placed', partial.teams.reduce((s, t) => s + t.count, 0) === 3, partial.teams.map(t => t.count));
 }
 
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');

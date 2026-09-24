@@ -119,6 +119,7 @@
     var iterations = Math.max(200, Math.min(200000, parseInt(opts.iterations, 10) || 6000));
     var restarts = Math.max(1, Math.min(50, parseInt(opts.restarts, 10) || 10));
     var balance = opts.balance !== false;
+    var maxPerTeam = Math.max(0, parseInt(opts.maxPerTeam, 10) || 0);
     var seed = (parseInt(opts.seed, 10) || 1) >>> 0;
     var people = (opts.people || []).slice();
     var warnings = [];
@@ -127,7 +128,10 @@
     people.forEach(function (p, i) { index[p.name.toLowerCase()] = i; });
 
     if (people.length === 0) {
-      return { teams: [], violations: [], conflicts: [], warnings: ['名單係空嘅'], ok: false };
+      // No names at all: still lay out the teams so the empty seats can be planned/filled in later.
+      var seatTeams = [];
+      for (var s0 = 0; s0 < T; s0++) seatTeams.push({ id: s0, members: [], count: 0, weight: 0 });
+      return { teams: seatTeams, repeats: [], violations: [], conflicts: [], warnings: [], imbalance: 0, maxPerTeam: maxPerTeam, ok: true };
     }
 
     /* ---- split repeatable people out of the core ---- */
@@ -266,12 +270,14 @@
         t = teamOf[i];
         if (t >= 0 && t < T) { loads[t] += blockWeight[i]; counts[t] += blockMembers[i].length; }
       }
-      // repeat people that are limited to N teams: they add real load
+      // repeat people: "every team" adds a headcount but no balance weight; "up to N" adds both
       for (i = 0; i < repeatList.length; i++) {
         var spec = repeatOf[repeatList[i]];
         var w = spec.weight, n = spec.max;
         if (n > 0) {
           repTeams[i].forEach(function (tt) { loads[tt] += w; counts[tt] += 1; });
+        } else {
+          for (t = 0; t < T; t++) counts[t] += 1;
         }
       }
       var violations = [];
@@ -308,7 +314,11 @@
         var cmean = counts.reduce(function (s, v) { return s + v; }, 0) / T;
         for (t = 0; t < T; t++) { var dc = counts[t] - cmean; imbalance += dc * dc * 0.01; }
       }
-      return { score: violations.length * 1e6 + imbalance, imbalance: imbalance, loads: loads, counts: counts, violations: violations };
+      var overflow = 0;
+      if (maxPerTeam > 0) {
+        for (t = 0; t < T; t++) if (counts[t] > maxPerTeam) overflow += counts[t] - maxPerTeam;
+      }
+      return { score: violations.length * 1e6 + overflow * 1e4 + imbalance, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow };
     }
 
     var rng = makeRng(seed);
@@ -403,10 +413,14 @@
     if (best.violations.length) {
       warnings.push('有 ' + best.violations.length + ' 對「唔可以同隊」仍然有重疊（規則太多／衝突，冇完美解）');
     }
+    if (maxPerTeam > 0 && best.overflow > 0) {
+      warnings.push('有 ' + best.overflow + ' 個人超出「每隊最多 ' + maxPerTeam + ' 人」—— 隊數唔夠，加多幾隊或者提高上限');
+    }
 
     return {
       teams: teams,
       repeats: repeats,
+      maxPerTeam: maxPerTeam,
       violations: best.violations,
       conflicts: conflicts,
       warnings: warnings,
@@ -417,6 +431,13 @@
 
   function allTeams(T) { var a = []; for (var i = 0; i < T; i++) a.push(i); return a; }
 
+  // How many teams are needed so that nobody exceeds maxPerTeam? (0 = unlimited)
+  function autoTeams(n, maxPerTeam) {
+    var max = parseInt(maxPerTeam, 10) || 0;
+    if (max <= 0) return Math.max(2, Math.min(20, n || 2));
+    return Math.max(1, Math.min(20, Math.ceil((n || 1) / max)));
+  }
+
   // repeatable people that are in EVERY team (used when there is no core list)
   function repeatEntryTeams(repeatList, repeatOf, T) {
     return repeatList.map(function (k) {
@@ -425,5 +446,5 @@
     });
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng };
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams };
 });
