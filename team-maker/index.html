@@ -156,7 +156,7 @@ const els = {
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v12';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v13';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -168,8 +168,8 @@ const DICT = {
     phCannot:'陳大文 ! 李小明\n甲 ! 乙 ! 丙',
     lblMust:'必須同隊 <span class="tag">每行一對：A + B</span>',
     phMust:'李小明 + 王五',
-    lblRepeat:'可以重複（跨隊） <span class="tag">名字 ＝ 每隊都有　·　名字 2 ＝ 最多 2 隊</span>',
-    phRepeat:'陳教練\n助手 2',
+    lblRepeat:'可以重複（跨隊） <span class="tag">名字 ＝ 可重複（唔一定）· 名字 2 ＝ 最多 2 隊 · 名字 * ＝ 每隊都要</span>',
+    phRepeat:'陳教練\n助手 2\n主持 *',
     lblRandomPick:'隨機抽選成員（唔一定人人有隊）',
     notPicked:'未入選（{n} 人）',
     lblTeams:'隊數 <span class="tag">留空＝自動</span>',
@@ -183,7 +183,7 @@ const DICT = {
     lblMaxPerRandom:'每隊最多（隨機上限；留空＝同最少一樣）',
     lblBalance:'平均分配權重',
     lblAutoGrow:'唔夠位自動加隊',
-    hint:'規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。',
+    hint:'規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ <b>可重複</b>（唔一定每隊都有，由系統決定）；<code>助手 2</code> ＝ 最多 2 隊；<code>主持 *</code> ＝ 強制每隊都有。「每隊都要」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。',
     btnGo:'分隊！', btnReroll:'重新抽（換 seed）', btnCopy:'複製結果', btnDemo:'載入示範',
     btnPick:'揀', btnPicked:'✓ 已揀', btnPickRandom:'🎲 隨機揀一隊', btnCopyTeam:'複製揀咗嗰隊',
     chosenTitle:'已揀 {team} 隊（{n} 人）',
@@ -193,7 +193,7 @@ const DICT = {
     sizeCap:' · 每隊上限 {n}',
     actualSizes:'<br>實際每隊人數：{list}',
     teamWord:'隊', membersWord:'人 · 總權重 {w}',
-    everyTeam:'每隊', seat:'空位', empty:'（空）',
+    everyTeam:'每隊', mayRepeat:'可重複', seat:'空位', empty:'（空）',
     needInput:'先輸入名單；或者設定「每隊最多」即可以淨係排空位。',
     emptyListNote:'名單係空嘅 —— 可以淨係排空位，之後再填名。',
     autoTeams:'隊數留空 → 自動用 {n} 隊',
@@ -216,8 +216,8 @@ const DICT = {
     phCannot:'Alice ! Bob\nX ! Y ! Z',
     lblMust:'Must be together <span class="tag">one pair per line: A + B</span>',
     phMust:'Bob + Dave',
-    lblRepeat:'Repeatable (across teams) <span class="tag">name = in every team · name 2 = up to 2 teams</span>',
-    phRepeat:'Coach\nHelper 2',
+    lblRepeat:'Repeatable (across teams) <span class="tag">name = may repeat · name 2 = up to 2 teams · name * = in every team</span>',
+    phRepeat:'Coach\nHelper 2\nHost *',
     lblRandomPick:'Randomly pick who gets in (not everyone has to get a team)',
     notPicked:'Not selected ({n})',
     lblTeams:'Teams <span class="tag">blank = auto</span>',
@@ -231,7 +231,7 @@ const DICT = {
     lblMaxPerRandom:'Max per team (upper bound; blank = same as min)',
     lblBalance:'Balance total weight',
     lblAutoGrow:'Auto-add teams when needed',
-    hint:'Rules: <code>!</code>, <code>×</code> or <code>,</code> means “keep apart”; <code>+</code> means “keep together”. Names must match the list above.<br>Want <b>3 people (or more) all in different teams</b>? Put them on one line — <code>X ! Y ! Z</code> (auto-expands to every pair).<br>Repeatable column: <code>Coach</code> = in every team; <code>Helper 2</code> = in up to 2 teams (picks the teams that need it most). “Every team” members are excluded from weight balancing.<br>You don’t have to fill the list — once a per-team size is set, the leftover places show as “empty” seats you can fill later.',
+    hint:'Rules: <code>!</code>, <code>×</code> or <code>,</code> means “keep apart”; <code>+</code> means “keep together”. Names must match the list above.<br>Want <b>3 people (or more) all in different teams</b>? Put them on one line — <code>X ! Y ! Z</code> (auto-expands to every pair).<br>Repeatable column: <code>Coach</code> = may repeat (not required anywhere); <code>Helper 2</code> = up to 2 teams; <code>Host *</code> = mandatory in every team. “Every team” members are excluded from weight balancing.<br>You don’t have to fill the list — once a per-team size is set, the leftover places show as “empty” seats you can fill later.',
     btnGo:'Build teams!', btnReroll:'Re-roll (new seed)', btnCopy:'Copy result', btnDemo:'Load demo',
     btnPick:'Pick', btnPicked:'✓ Picked', btnPickRandom:'🎲 Pick a random team', btnCopyTeam:'Copy picked team',
     chosenTitle:'Picked: {team} ({n} members)',
@@ -241,7 +241,7 @@ const DICT = {
     sizeCap:' · max {n} per team',
     actualSizes:'<br>Actual team sizes: {list}',
     teamWord:'Team', membersWord:'members · total weight {w}',
-    everyTeam:'every', seat:'empty', empty:'(empty)',
+    everyTeam:'every', mayRepeat:'may repeat', seat:'empty', empty:'(empty)',
     needInput:'Enter a list, or set “max per team” to lay out empty seats only.',
     emptyListNote:'The list is empty — laying out seats only; add names later.',
     autoTeams:'Teams left blank → using {n} automatically',
@@ -347,7 +347,7 @@ function render(res){
         <h2><span>${t('teamWord')} ${LETTERS[i] || '#'+(i+1)}</span> <em class="${caps && caps[i] && t_.count > caps[i] ? 'over' : ''}">${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})}</em><button class="pickbtn${chosen === i ? ' on' : ''}" data-team="${i}" type="button">${chosen === i ? t('btnPicked') : t('btnPick')}</button></h2>
         <div class="bar"><i style="width:${Math.round(t_.weight/max*100)}%"></i></div>
         <ul class="members">
-          ${t_.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? t('everyTeam') : '×' + m.repeat}</b>` : ''}</li>`).join('')}${caps && caps[i] ? Array.from({length: Math.max(0, caps[i] - t_.count)}, () => `<li class="seat">${t('seat')}</li>`).join('') : (t_.members.length ? '' : `<li style="color:var(--dim)">${t('empty')}</li>`)}
+          ${t_.members.map(m => `<li class="${m.repeat ? 'rep' : ''}">${esc(m.name)}${m.weight !== 1 ? `<b>${m.weight}</b>` : ''}${m.repeat ? `<b class="repb">${m.repeat === 'all' ? t('everyTeam') : (m.repeat === 'any' ? t('mayRepeat') : '×' + m.repeat)}</b>` : ''}</li>`).join('')}${caps && caps[i] ? Array.from({length: Math.max(0, caps[i] - t_.count)}, () => `<li class="seat">${t('seat')}</li>`).join('') : (t_.members.length ? '' : `<li style="color:var(--dim)">${t('empty')}</li>`)}
         </ul>
       </div>`).join('') + benchHtml;
     els.toolbar.classList.toggle('hidden', !res.teams.length);
@@ -465,7 +465,7 @@ els.copyTeam.addEventListener('click', async () => {
   if(!res || chosen === null || !res.teams[chosen]) return;
   const tm = res.teams[chosen];
   const txt = `${t('teamWord')} ${LETTERS[chosen] || '#'+(chosen+1)} (${tm.count} ${t('membersWord', {w:tm.weight})})\n` +
-    tm.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : ' [×'+m.repeat+']') : ''}`).join('\n');
+    tm.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : (m.repeat === 'any' ? ` [${t('mayRepeat')}]` : ' [×'+m.repeat+']')) : ''}`).join('\n');
   try{ await navigator.clipboard.writeText(txt); els.chosenInfo.textContent = t('pickedCopied'); }
   catch(e){ els.status.insertAdjacentHTML('afterbegin', `<div class="warn">${t('copyFail')}</div>`); }
 });
@@ -482,7 +482,7 @@ els.copy.addEventListener('click', async () => {
   const txt = res.teams.map((t_,i) =>
     `${t('teamWord')} ${LETTERS[i] || '#'+(i+1)} (${t_.count}${caps && caps[i] ? '/'+caps[i] : ''} ${t('membersWord', {w:t_.weight})})` +
     (caps && caps[i] && caps[i] > t_.count ? ` [${t('seat')} ${caps[i] - t_.count}]` : '') + '\n' +
-    t_.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : ' [×'+m.repeat+']') : ''}`).join('\n')
+    t_.members.map(m => `  - ${m.name}${m.weight !== 1 ? ' ('+m.weight+')' : ''}${m.repeat ? (m.repeat === 'all' ? ` [${t('everyTeam')}]` : (m.repeat === 'any' ? ` [${t('mayRepeat')}]` : ' [×'+m.repeat+']')) : ''}`).join('\n')
   ).join('\n\n');
   try{ await navigator.clipboard.writeText(txt); els.go.textContent = t('copied'); setTimeout(()=>els.go.textContent = t('btnGo'), 1200); }
   catch(e){ els.status.insertAdjacentHTML('afterbegin', `<div class="warn">${t('copyFail')}</div>`); }

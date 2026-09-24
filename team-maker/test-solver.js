@@ -126,8 +126,8 @@ console.log('\n[8] stress: 40 people, 8 cannot-pairs, 4 teams');
 console.log('\n[9] repeatable members (跨隊重複)');
 {
   const people = S.parsePeople('A 3\nB 2\nC 3\nD 1\nE 2\nF 3\n教練 2\n助手 1').people;
-  const rep = S.parseRepeat('教練\n助手 2').items;
-  check('parseRepeat: plain name = every team', rep[0].teams === 0, rep);
+  const rep = S.parseRepeat('教練 *\n助手 2').items;
+  check('parseRepeat: "name *" = every team', rep[0].every === true, rep);
   check('parseRepeat: "助手 2" = max 2', rep[1].teams === 2, rep);
 
   const res = S.solve({ people, teams: 3, repeat: rep, seed: 11 });
@@ -148,7 +148,7 @@ console.log('\n[10] repeat + rule edge cases');
 {
   const people = S.parsePeople('X\nY\nZ\nHelper').people;
   const res = S.solve({
-    people, teams: 2, repeat: S.parseRepeat('Helper').items,
+    people, teams: 2, repeat: S.parseRepeat('Helper *').items,
     cannotPairs: S.parsePairs('Helper ! X\nX ! Y').pairs,
     mustPairs: S.parsePairs('Helper + Z').pairs, seed: 4
   });
@@ -161,7 +161,7 @@ console.log('\n[10] repeat + rule edge cases');
   const bad = S.solve({ people, teams: 2, repeat: S.parseRepeat('Nobody').items, seed: 1 });
   check('unknown repeat name warned', bad.warnings.some(w => w.includes('唔喺名單')), bad.warnings);
   const maxed = S.solve({ people, teams: 2, repeat: S.parseRepeat('Helper 9').items, seed: 1 });
-  check('max > team count becomes every team', maxed.teams.every(t => t.members.some(m => m.name === 'Helper')));
+  check('"up to 9" with only 2 teams lands in both', maxed.teams.every(t => t.members.some(m => m.name === 'Helper')));
 }
 
 console.log('\n[11] max members per team (每隊最多)');
@@ -179,12 +179,12 @@ console.log('\n[11] max members per team (每隊最多)');
 
   const withCoach = S.solve({
     people: S.parsePeople('A\nB\nC\nD\nE\nF\n教練').people,
-    teams: 3, maxPerTeam: 3, repeat: S.parseRepeat('教練').items, seed: 7
+    teams: 3, maxPerTeam: 3, repeat: S.parseRepeat('教練 *').items, seed: 7
   });
   check('every-team member counts toward the cap', withCoach.teams.every(t => t.count <= 3), withCoach.teams.map(t => t.count));
   const tighter = S.solve({
     people: S.parsePeople('A\nB\nC\nD\nE\nF\n教練').people,
-    teams: 3, maxPerTeam: 2, repeat: S.parseRepeat('教練').items, seed: 7
+    teams: 3, maxPerTeam: 2, repeat: S.parseRepeat('教練 *').items, seed: 7
   });
   check('warns when the every-team member busts the cap', tighter.warnings.some(w => w.includes('超出')), tighter.warnings);
 }
@@ -362,14 +362,14 @@ console.log('\n[19] auto-grow teams so a hard cap can never be exceeded');
 console.log('\n[20] repeatable members must count toward the per-team cap');
 {
   check('neededSeats(10, [], 3) = 10', S.neededSeats(10, [], 3) === 10, S.neededSeats(10, [], 3));
-  check('neededSeats(10, [{teams:0}], 3) = 13 (every team eats a seat)', S.neededSeats(10, [{ teams: 0 }], 3) === 13, S.neededSeats(10, [{ teams: 0 }], 3));
-  check('neededSeats(10, [{teams:2}], 3) = 12', S.neededSeats(10, [{ teams: 2 }], 3) === 12, S.neededSeats(10, [{ teams: 2 }], 3));
-  check('neededSeats(10, [0-share, 2-share], 4) = 16', S.neededSeats(10, [{ teams: 0 }, { teams: 2 }], 4) === 16, S.neededSeats(10, [{ teams: 0 }, { teams: 2 }], 4));
+  check('neededSeats(10, [every], 3) = 13 (every-team eats a seat)', S.neededSeats(10, [{ every: true }], 3) === 13, S.neededSeats(10, [{ every: true }], 3));
+  check('neededSeats(10, [up-to-2], 3) = 10 (optional seating never forces teams)', S.neededSeats(10, [{ teams: 2 }], 3) === 10, S.neededSeats(10, [{ teams: 2 }], 3));
+  check('neededSeats(10, [every, up-to-2], 4) = 14', S.neededSeats(10, [{ every: true }, { teams: 2 }], 4) === 14, S.neededSeats(10, [{ every: true }, { teams: 2 }], 4));
 
   const lines = Array.from({ length: 20 }, (_, i) => 'P' + (i + 1)).join('\n');
   const core = S.parsePeople(lines).people;
   const withCoach = S.parsePeople(lines + '\n教練').people;
-  const rep = S.parseRepeat('教練').items;
+  const rep = S.parseRepeat('教練 *').items;
 
   let T = S.teamsNeeded(core.length, 5);
   check('naive team count would be 4', T === 4, T);
@@ -408,7 +408,7 @@ console.log('\n[21] planTeams: you can always shrink the team count back');
   const e2 = S.planTeams({ pinned: 2, cap: 5, core: 10, repeats: [], autoGrow: true });
   check('5 teams then 2 teams → really 2 (nothing sticky)', e1.teams === 5 && e2.teams === 2, [e1.teams, e2.teams]);
 
-  const f = S.planTeams({ pinned: 3, cap: 5, core: 20, repeats: [{ teams: 0 }], autoGrow: true });
+  const f = S.planTeams({ pinned: 3, cap: 5, core: 20, repeats: [{ every: true }], autoGrow: true });
   check('repeatable members are counted while planning (5 teams)', f.teams === 5, f);
   const g = S.planTeams({ pinned: 9, cap: 0, core: 20, repeats: [], autoGrow: true });
   check('no cap → your count is kept exactly', g.teams === 9 && g.minRequired === 0, g);
@@ -450,6 +450,33 @@ console.log('\n[22] optional members may stay out of every team (bench)');
   check('results stay deterministic for one seed',
     JSON.stringify(S.solve({ people, teams: 2, maxPerTeam: 5, optional: opt, seed: 5 }).bench.map(b => b.name)) ===
     JSON.stringify(res.bench.map(b => b.name)));
+}
+
+console.log('\n[23] repeatable is optional by default (may repeat, NOT mandatory)');
+{
+  const people = S.parsePeople('A\nB\nC\nD\nE\nF\nG\nH\nI\n教練\n主持').people;
+  const plain = S.parseRepeat('教練').items;
+  check('plain name → may-repeat (every:false)', plain[0].every === false && plain[0].teams === 0, plain);
+  const star = S.parseRepeat('主持 *').items;
+  check('"name *" → every-team (every:true)', star[0].every === true, star);
+  const starWord = S.parseRepeat('主持 每隊').items;
+  check('"name 每隊" also works', starWord[0].every === true, starWord);
+
+  const res = S.solve({ people, teams: 3, repeat: plain.concat(star), seed: 4 });
+  const inTeams = n => res.teams.filter(t => t.members.some(m => m.name === n)).length;
+  check('mandatory "主持 *" is in all 3 teams', inTeams('主持') === 3, inTeams('主持'));
+  check('plain 教練 is NOT forced into every team', inTeams('教練') < 3, inTeams('教練'));
+  check('plain 教練 still gets one team (unrestricted)', inTeams('教練') === 1, inTeams('教練'));
+  check('summary records both modes', res.repeats.some(r => r.mode === 'any') && res.repeats.some(r => r.mode === 'every'), res.repeats);
+  check('member badge is marked may-repeat', res.teams.some(t => t.members.some(m => m.name === '教練' && m.repeat === 'any')));
+
+  const capped = S.solve({ people, teams: 2, maxPerTeam: 6, repeat: plain, seed: 4 });
+  check('never breaks a cap while repeating', capped.teams.every((t, i) => t.count <= capped.caps[i]), capped.teams.map((t, i) => t.count + '/' + capped.caps[i]));
+  check('may repeat when seats are free', capped.teams.filter(t => t.members.some(m => m.name === '教練')).length >= 1);
+
+  const upto = S.solve({ people, teams: 3, repeat: S.parseRepeat('教練 2').items, seed: 3 });
+  const uptoCount = upto.teams.filter(t => t.members.some(m => m.name === '教練')).length;
+  check('"name 2" still repeats into 2 teams', uptoCount === 2, uptoCount);
 }
 
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');

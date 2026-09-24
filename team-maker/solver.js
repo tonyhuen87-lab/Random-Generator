@@ -137,19 +137,27 @@
     return { pairs: pairs, warnings: warnings };
   }
 
-  /* Repeatable people: "Name" = in EVERY team; "Name 2" / "Name x2" / "Name 最多2" = up to 2 teams. */
+  /* Repeatable people:
+       "Name"      → MAY repeat (not required anywhere; the solver decides)
+       "Name 2"    → up to 2 teams
+       "Name *"    → mandatory in EVERY team (all / every / 全部 / 每隊 also work) */
   function parseRepeat(text, lang) {
     var items = [], warnings = [];
     String(text || '').split(/\r?\n/).forEach(function (raw) {
       var line = raw.trim();
       if (!line || line.charAt(0) === '#') return;
-      var name = line, teams = 0; // 0 = every team
-      var m = line.match(/^(.*?)[\s]*(?:x|×|\*|=|max|最多|可|每)\s*(\d+)\s*$/i)
+      var name = line, teams = 0, every = false;
+      var m = line.match(/^(.*?)[\s]*(?:x|×|=|max|最多)\s*(\d+)\s*$/i)
            || line.match(/^(.*?)\s+(\d+)\s*$/);
-      if (m && m[1].trim()) { name = m[1].trim(); teams = parseInt(m[2], 10); }
+      if (m && m[1].trim()) {
+        name = m[1].trim(); teams = parseInt(m[2], 10);
+      } else {
+        var e = line.match(/^(.*?)[\s]*(?:\*|all|every|全部|每隊|都要)\s*$/i);
+        if (e && e[1].trim()) { name = e[1].trim(); every = true; }
+      }
       if (!name) { warnings.push(msg(lang, 'repeatNoName', line)); return; }
       if (teams === 1) { warnings.push(msg(lang, 'repeatOne', name)); }
-      items.push({ name: name, teams: teams > 1 ? teams : 0 });
+      items.push({ name: name, teams: teams > 1 ? teams : 0, every: every });
     });
     return { items: items, warnings: warnings };
   }
@@ -212,11 +220,13 @@
         warnings.push(msg(lang, 'repeatUnknown', spec.name));
         return;
       }
-      var max = parseInt(spec.teams, 10) || 0;
-      if (max > T) max = 0;               // asking for more teams than exist = every team
-      if (max === 1) max = 0;
+      var n = parseInt(spec.teams, 10) || 0;
+      var mode;
+      if (spec.every === true) mode = 'every';
+      else if (n > 1) { mode = 'upto'; if (n > T) n = T; }
+      else mode = 'any';                 // may repeat, but not required anywhere
       if (repeatOf[key] === undefined) repeatList.push(key);
-      repeatOf[key] = { max: max, name: people[index[key]].name, weight: people[index[key]].weight };
+      repeatOf[key] = { mode: mode, max: (mode === 'upto' ? n : 0), name: people[index[key]].name, weight: people[index[key]].weight };
     });
 
     // Optional people may end up in NO team; everybody else must be placed.
@@ -255,11 +265,11 @@
         var ka = pr[0].toLowerCase(), kb = pr[1].toLowerCase();
         var ra = repeatOf[ka], rb = repeatOf[kb];
         if (ra || rb) {
-          if (ra && ra.max === 0) {
+          if (ra && ra.mode === 'every') {
             warnings.push(msg(lang, 'neverSeparate', ra.name, pr[1]));
             return;
           }
-          if (rb && rb.max === 0) {
+          if (rb && rb.mode === 'every') {
             warnings.push(msg(lang, 'neverSeparate', rb.name, pr[0]));
             return;
           }
@@ -354,7 +364,7 @@
     var caps = null;
     if (sizeRange) {
       var needed = requiredCount;
-      repeatList.forEach(function (k) { var s = repeatOf[k]; needed += (s.max === 0 ? T : s.max); });
+      repeatList.forEach(function (k) { var s = repeatOf[k]; if (s.mode === 'every') needed += T; });
       var capsRng = makeRng((seed ^ 0x5bf03635) >>> 0);
       caps = [];
       for (var ci = 0; ci < T; ci++) {
@@ -385,14 +395,15 @@
         t = teamOf[i];
         if (t >= 0 && t < T) { loads[t] += blockWeight[i]; counts[t] += blockMembers[i].length; }
       }
-      // repeat people: "every team" adds a headcount but no balance weight; "up to N" adds both
+      // repeat people: "every" adds a headcount only; the rest add weight + a headcount
+      // on each team they join (they are optional, so they may join none)
       for (i = 0; i < repeatList.length; i++) {
         var spec = repeatOf[repeatList[i]];
-        var w = spec.weight, n = spec.max;
-        if (n > 0) {
-          repTeams[i].forEach(function (tt) { loads[tt] += w; counts[tt] += 1; });
-        } else {
+        if (spec.mode === 'every') {
           for (t = 0; t < T; t++) counts[t] += 1;
+        } else {
+          var w = spec.weight;
+          repTeams[i].forEach(function (tt) { loads[tt] += w; counts[tt] += 1; });
         }
       }
       var violations = [];
@@ -405,7 +416,7 @@
       for (i = 0; i < repeatList.length; i++) {
         var key = repeatList[i], f = repeatForbid[key];
         if (!f) continue;
-        var mine = repeatOf[key].max === 0
+        var mine = repeatOf[key].mode === 'every'
           ? allTeams(T)
           : repTeams[i];
         var mineSet = Object.create(null); mine.forEach(function (x) { mineSet[x] = 1; });
@@ -415,7 +426,7 @@
         });
         Object.keys(f.rep).forEach(function (rk) {
           var j = repeatList.indexOf(rk);
-          var other = repeatOf[rk].max === 0 ? allTeams(T) : repTeams[j];
+          var other = repeatOf[rk].mode === 'every' ? allTeams(T) : repTeams[j];
           if (other.some(function (x) { return mineSet[x]; })) {
             violations.push({ a: repeatOf[key].name, b: repeatOf[rk].name });
           }
@@ -442,12 +453,26 @@
         if (!assigned) reqOut += (blockMembers[i].length - optMembers);
         else optPlaced += optMembers;
       }
-      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * 1e3 + imbalance;
+      var anyBonus = 0;
+      for (i = 0; i < repeatList.length; i++) {
+        if (repeatOf[repeatList[i]].mode !== 'any') continue;
+        var cnt = repTeams[i].length;
+        // With a cap, filling spare seats is useful. Without one, place exactly once —
+        // extra copies must never be free, or the search would spread them everywhere.
+        if (caps) anyBonus += 1e3 * cnt;
+        else anyBonus += 1e3 * Math.min(1, cnt) - Math.max(0, cnt - 1);
+      }
+      var score = reqOut * 1e7 + violations.length * 1e6 + overflow * 1e4 - optPlaced * 1e3 - anyBonus + imbalance;
       return { score: score, imbalance: imbalance, loads: loads, counts: counts, violations: violations, overflow: overflow, reqOut: reqOut, optPlaced: optPlaced };
     }
 
     var rng = makeRng(seed);
     var best = null, bestTeamOf = null, bestRepTeams = null;
+    var uptoRepeatIdx = [], anyRepeatIdx = [];
+    repeatList.forEach(function (k, i) {
+      if (repeatOf[k].mode === 'upto') uptoRepeatIdx.push(i);
+      else if (repeatOf[k].mode === 'any') anyRepeatIdx.push(i);
+    });
 
     for (var r = 0; r < restarts; r++) {
       var order = blocks.map(function (_, i) { return i; });
@@ -462,13 +487,15 @@
         teamOf[b] = pick; loads[pick] += blockWeight[b];
       });
 
-      // seed the limited-repeat people onto the lightest teams
+      // seed the repeatable people: "up to N" filled first, "any" starts with one team
       var repTeams = repeatList.map(function (key) {
-        var n = repeatOf[key].max;
-        if (n === 0) return [];
-        var ranked = allTeams(T).sort(function (a, b) { return loads[a] - loads[b]; }).slice(0, n);
-        ranked.forEach(function (t) { loads[t] += repeatOf[key].weight; });
-        return ranked.sort(function (a, b) { return a - b; });
+        var spec = repeatOf[key];
+        if (spec.mode === 'every') return [];
+        var ranked = allTeams(T).sort(function (a, b) { return loads[a] - loads[b]; });
+        var take = (spec.mode === 'upto') ? Math.min(spec.max, T) : 1;
+        var picked = ranked.slice(0, take);
+        picked.forEach(function (t) { loads[t] += spec.weight; });
+        return picked.sort(function (a, b) { return a - b; });
       });
 
       var cur = costOf(teamOf, repTeams);
@@ -482,20 +509,34 @@
           var ob = optionalBlockIds[Math.floor(rng() * optionalBlockIds.length)];
           if (cand[ob] >= 0) cand[ob] = -1;
           else cand[ob] = Math.floor(rng() * T);
-        } else if (maxRepeat > 0 && roll < 0.4) {
-          // move a limited-repeat person to a different team
-          var idxs = [];
-          repeatList.forEach(function (kk, ii) { if (repeatOf[kk].max > 0) idxs.push(ii); });
-          if (!idxs.length) continue;
-          var ri = idxs[Math.floor(rng() * idxs.length)];
+        } else if (anyRepeatIdx.length && roll < 0.35) {
+          // "may repeat" person: add a team, drop a team, or move one
+          var ai = anyRepeatIdx[Math.floor(rng() * anyRepeatIdx.length)];
+          var setA = candRep[ai];
+          var freeA = allTeams(T).filter(function (t) { return setA.indexOf(t) === -1; });
+          var act = rng();
+          if (setA.length === 0 || act < 0.4) {
+            if (!freeA.length) continue;
+            setA.push(freeA[Math.floor(rng() * freeA.length)]);
+            setA.sort(function (a, b) { return a - b; });
+          } else if (act < 0.6) {
+            setA.splice(Math.floor(rng() * setA.length), 1);
+          } else {
+            if (!freeA.length) continue;
+            setA[Math.floor(rng() * setA.length)] = freeA[Math.floor(rng() * freeA.length)];
+            setA.sort(function (a, b) { return a - b; });
+          }
+        } else if (uptoRepeatIdx.length && roll < 0.5) {
+          // move an "up to N teams" person to a different team
+          var ri = uptoRepeatIdx[Math.floor(rng() * uptoRepeatIdx.length)];
           var set = candRep[ri];
           var free = allTeams(T).filter(function (t) { return set.indexOf(t) === -1; });
-          if (!free.length) continue;
+          if (!free.length || !set.length) continue;
           var to = free[Math.floor(rng() * free.length)];
           var drop = Math.floor(rng() * set.length);
           set[drop] = to;
           set.sort(function (a, b) { return a - b; });
-        } else if (blocks.length > 1 && roll < 0.8) {
+        } else if (blocks.length > 1 && roll < 0.85) {
           var b1 = Math.floor(rng() * blocks.length), b2 = Math.floor(rng() * blocks.length);
           if (b1 === b2 || cand[b1] === cand[b2]) continue;
           var tt = cand[b1]; cand[b1] = cand[b2]; cand[b2] = tt;
@@ -531,9 +572,10 @@
     });
     repeatList.forEach(function (key, i) {
       var spec = repeatOf[key];
-      var ids = spec.max === 0 ? allTeams(T) : bestRepTeams[i];
+      var ids = spec.mode === 'every' ? allTeams(T) : bestRepTeams[i];
+      var label = spec.mode === 'every' ? 'all' : (spec.mode === 'upto' ? spec.max : 'any');
       ids.forEach(function (t4) {
-        teams[t4].members.push({ name: spec.name, weight: spec.weight, repeat: spec.max === 0 ? 'all' : spec.max });
+        teams[t4].members.push({ name: spec.name, weight: spec.weight, repeat: label });
       });
     });
     teams.forEach(function (tm) {
@@ -544,7 +586,12 @@
 
     var repeats = repeatList.map(function (key) {
       var spec = repeatOf[key];
-      return { name: spec.name, teams: spec.max === 0 ? T : spec.max, every: spec.max === 0 };
+      return {
+        name: spec.name,
+        mode: spec.mode,
+        teams: spec.mode === 'every' ? T : (spec.mode === 'upto' ? spec.max : 'any'),
+        every: spec.mode === 'every'
+      };
     });
 
     if (bench.length) warnings.push(msg(lang, 'benchNote', bench.length));
@@ -590,7 +637,8 @@
   function repeatEntryTeams(repeatList, repeatOf, T) {
     return repeatList.map(function (k) {
       var s = repeatOf[k];
-      return { name: s.name, weight: s.weight, teams: s.max === 0 ? T : s.max, label: s.max === 0 ? 'all' : s.max, teamIds: allTeams(T) };
+      var label = s.mode === 'every' ? 'all' : (s.mode === 'upto' ? s.max : 'any');
+      return { name: s.name, weight: s.weight, label: label, teamIds: s.mode === 'every' ? allTeams(T) : [0] };
     });
   }
 
@@ -623,13 +671,15 @@
     return Math.max(1, Math.min(20, Math.ceil(people / cap)));
   }
 
-  // Head count to seat: n core members PLUS every repeatable member (0 teams = in all T teams).
+  // Seats that are MANDATORY: n core members plus every "in every team" repeat member.
+  // "may repeat" and "up to N" members are optional, so they never force extra teams.
   function neededSeats(n, repeats, T) {
     var need = Math.max(0, parseInt(n, 10) || 0);
     var teams = Math.max(1, parseInt(T, 10) || 1);
     (repeats || []).forEach(function (s) {
-      var k = parseInt(s && s.teams, 10) || 0;
-      need += (k === 0 ? teams : Math.min(k, teams));
+      if (!s) return;
+      var every = (s.every === true) || (s.mode === 'every');
+      if (every) need += teams;
     });
     return need;
   }
