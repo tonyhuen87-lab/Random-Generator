@@ -359,5 +359,37 @@ console.log('\n[19] auto-grow teams so a hard cap can never be exceeded');
   check('no overflow warning needed', !res.warnings.some(w => w.includes('超出')), res.warnings);
 }
 
+console.log('\n[20] repeatable members must count toward the per-team cap');
+{
+  check('neededSeats(10, [], 3) = 10', S.neededSeats(10, [], 3) === 10, S.neededSeats(10, [], 3));
+  check('neededSeats(10, [{teams:0}], 3) = 13 (every team eats a seat)', S.neededSeats(10, [{ teams: 0 }], 3) === 13, S.neededSeats(10, [{ teams: 0 }], 3));
+  check('neededSeats(10, [{teams:2}], 3) = 12', S.neededSeats(10, [{ teams: 2 }], 3) === 12, S.neededSeats(10, [{ teams: 2 }], 3));
+  check('neededSeats(10, [0-share, 2-share], 4) = 16', S.neededSeats(10, [{ teams: 0 }, { teams: 2 }], 4) === 16, S.neededSeats(10, [{ teams: 0 }, { teams: 2 }], 4));
+
+  const lines = Array.from({ length: 20 }, (_, i) => 'P' + (i + 1)).join('\n');
+  const core = S.parsePeople(lines).people;
+  const withCoach = S.parsePeople(lines + '\n教練').people;
+  const rep = S.parseRepeat('教練').items;
+
+  let T = S.teamsNeeded(core.length, 5);
+  check('naive team count would be 4', T === 4, T);
+  for (let i = 0; i < 6; i++) {
+    const need = S.neededSeats(core.length, rep, T);
+    const fit = S.teamsNeeded(need, 5);
+    if (fit <= T) break;
+    T = fit;
+  }
+  check('iteration grows it to 5 teams', T === 5, T);
+
+  const res = S.solve({ people: withCoach, teams: T, maxPerTeam: 5, repeat: rep, seed: 3 });
+  check('nobody exceeds 5 once the coach is counted', res.teams.every(t => t.count <= 5), res.teams.map(t => t.count));
+  check('coach still in every team', res.teams.every(t => t.members.some(m => m.name === '教練')));
+  check('no overflow warning', !res.warnings.some(w => w.includes('超出')), res.warnings);
+
+  const tight = S.solve({ people: withCoach, teams: 4, maxPerTeam: 5, repeat: rep, seed: 3 });
+  check('4 teams genuinely overflows → honest warning', tight.warnings.some(w => w.includes('超出')), tight.warnings);
+  check('and the over-cap team is marked (count > cap)', tight.teams.some((t, i) => t.count > tight.caps[i]), tight.teams.map((t, i) => t.count + '/' + tight.caps[i]));
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

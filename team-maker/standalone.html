@@ -720,7 +720,18 @@
     return Math.max(1, Math.min(20, Math.ceil(people / cap)));
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded };
+  // Head count to seat: n core members PLUS every repeatable member (0 teams = in all T teams).
+  function neededSeats(n, repeats, T) {
+    var need = Math.max(0, parseInt(n, 10) || 0);
+    var teams = Math.max(1, parseInt(T, 10) || 1);
+    (repeats || []).forEach(function (s) {
+      var k = parseInt(s && s.teams, 10) || 0;
+      need += (k === 0 ? teams : Math.min(k, teams));
+    });
+    return need;
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded, neededSeats: neededSeats };
 });
 
 </script>
@@ -735,7 +746,7 @@ const els = {
   toolbar:$('toolbar'), chosenInfo:$('chosenInfo'), pickTeam:$('pickTeam'), copyTeam:$('copyTeam'), ver:$('ver')
 };
 const LETTERS = 'ABCDEFGHIJKLMNOP';
-const VERSION = 'v8';   // bump on every change so we can tell which build a phone is running
+const VERSION = 'v9';   // bump on every change so we can tell which build a phone is running
 
 /* ---------- i18n ---------- */
 const DICT = {
@@ -943,13 +954,18 @@ function run(newSeed, keepChosen){
   const autoTeamCount = !teamCount;
   const perTeamCap = randomSizes ? range.max : maxPer;
   let grewFrom = 0;
-  if(!teamCount){
-    teamCount = TeamSolver.autoTeams(parsed.people.length, perTeamCap);
-  }else if(perTeamCap > 0){
-    // A per-team limit is a hard constraint: if the pinned team count cannot hold
-    // everybody, add teams instead of silently stuffing 10 people into a 5-seat team.
-    const fit = TeamSolver.teamsNeeded(parsed.people.length, perTeamCap);
-    if(fit > teamCount){ grewFrom = teamCount; teamCount = fit; }
+  if(!teamCount) teamCount = TeamSolver.autoTeams(parsed.people.length, perTeamCap);
+  if(perTeamCap > 0){
+    // A per-team limit is a hard constraint. Repeatable members eat a seat too, and
+    // adding teams changes how many seats they eat, so iterate until it fits.
+    const started = teamCount;
+    for(let i = 0; i < 6; i++){
+      const need = TeamSolver.neededSeats(parsed.people.length, rep.items, teamCount);
+      const fit = TeamSolver.teamsNeeded(need, perTeamCap);
+      if(fit <= teamCount) break;
+      teamCount = fit;
+    }
+    if(teamCount > started) grewFrom = started;
   }
   let seed = parseInt(els.seed.value, 10);
   if(newSeed || !seed){ seed = Math.floor(Math.random() * 999999) + 1; els.seed.value = seed; }

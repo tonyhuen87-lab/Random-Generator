@@ -576,5 +576,16 @@
     return Math.max(1, Math.min(20, Math.ceil(people / cap)));
   }
 
-  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded };
+  // Head count to seat: n core members PLUS every repeatable member (0 teams = in all T teams).
+  function neededSeats(n, repeats, T) {
+    var need = Math.max(0, parseInt(n, 10) || 0);
+    var teams = Math.max(1, parseInt(T, 10) || 1);
+    (repeats || []).forEach(function (s) {
+      var k = parseInt(s && s.teams, 10) || 0;
+      need += (k === 0 ? teams : Math.min(k, teams));
+    });
+    return need;
+  }
+
+  return { solve: solve, parsePeople: parsePeople, parsePairs: parsePairs, parseRepeat: parseRepeat, makeRng: makeRng, autoTeams: autoTeams, randomIndex: randomIndex, normalizeRange: normalizeRange, parseCap: parseCap, teamsNeeded: teamsNeeded, neededSeats: neededSeats };
 });
