@@ -69,7 +69,7 @@
   <label>名單 <span class="tag">每行一個，可加權重</span></label>
   <textarea id="people" spellcheck="false" placeholder="陳大文 3&#10;李小明 2&#10;黃小美&#10;（唔寫數字＝權重 1）"></textarea>
   <label style="margin-top:12px">唔可以同隊 <span class="tag">每行一對：A ! B</span></label>
-  <textarea id="cannot" class="rule" spellcheck="false" placeholder="陳大文 ! 李小明&#10;黃小美 ! 張三"></textarea>
+  <textarea id="cannot" class="rule" spellcheck="false" placeholder="陳大文 ! 李小明&#10;甲 ! 乙 ! 丙"></textarea>
   <label style="margin-top:12px">必須同隊 <span class="tag">每行一對：A + B</span></label>
   <textarea id="must" class="rule" spellcheck="false" placeholder="李小明 + 王五"></textarea>
   <label style="margin-top:12px">可以重複（跨隊） <span class="tag">名字 ＝ 每隊都有　·　名字 2 ＝ 最多 2 隊</span></label>
@@ -104,7 +104,7 @@
   <div class="row">
     <label class="switch"><input type="checkbox" id="balance" checked> 平均分配權重</label>
   </div>
-  <div class="hint">規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。</div>
+  <div class="hint">規則寫法：<code>!</code> 或 <code>×</code> 或 <code>,</code> 都當「分開」；<code>+</code> 當「同隊」。名字要同上面名單一致。<br>想 <b>3 個人（或更多）全部唔同隊</b>：一行寫晒 —— <code>甲 ! 乙 ! 丙</code>（會自動變成互相分開）。<br>「可重複」欄：<code>陳教練</code> ＝ 每隊都要有佢；<code>助手 2</code> ＝ 最多落 2 隊（自動揀最需要嘅隊）。「每隊都有」嘅人唔計入權重平衡。<br>名單可以唔填滿 —— 設定咗「每隊最多」之後，剩返嘅位會顯示「空位」，方便你之後再填。</div>
 </div>
 
 <button class="primary" id="go">分隊！</button>

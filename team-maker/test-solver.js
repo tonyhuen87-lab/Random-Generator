@@ -235,5 +235,26 @@ console.log('\n[13] random team sizes (每隊人數隨機 1–10)');
     withCoach.teams.every((t, i) => t.count <= withCoach.caps[i]), withCoach.teams.map((t, i) => t.count + '/' + withCoach.caps[i]));
 }
 
+console.log('\n[14] 3+ people all in different teams (一行寫晒)');
+{
+  const people = S.parsePeople('A\nB\nC\nD\nE\nF').people;
+  const pairs = S.parsePairs('A ! B ! C').pairs;
+  check('a 3-name line expands to 3 pairwise rules', pairs.length === 3, pairs);
+
+  const res = S.solve({ people, teams: 3, cannotPairs: pairs, seed: 21 });
+  const tOf = n => res.teams.findIndex(t => t.members.some(m => m.name === n));
+  check('A, B and C all in DIFFERENT teams', new Set([tOf('A'), tOf('B'), tOf('C')]).size === 3, [tOf('A'), tOf('B'), tOf('C')]);
+  check('no violations', res.violations.length === 0, res.violations);
+
+  const four = S.solve({ people, teams: 4, cannotPairs: S.parsePairs('A,B,C,D').pairs, seed: 22 });
+  const t4 = n => four.teams.findIndex(t => t.members.some(m => m.name === n));
+  check('4-name line keeps all four apart', new Set(['A', 'B', 'C', 'D'].map(t4)).size === 4, ['A', 'B', 'C', 'D'].map(t4));
+
+  const tight = S.solve({ people, teams: 2, cannotPairs: pairs, seed: 21 });
+  check('honest warning when 2 teams cannot hold 3 apart', tight.warnings.some(w => w.includes('冇完美解')), tight.warnings);
+  check('parse note explains the expansion', S.parsePairs('A ! B ! C').warnings.some(w => w.includes('互相都唔同隊')),
+    S.parsePairs('A ! B ! C').warnings);
+}
+
 console.log('\n================ ' + pass + ' passed, ' + fail + ' failed ================\n');
 process.exit(fail ? 1 : 0);

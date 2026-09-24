@@ -76,7 +76,7 @@
         for (var i = 0; i < parts.length; i++) {
           for (var j = i + 1; j < parts.length; j++) pairs.push([parts[i], parts[j]]);
         }
-        warnings.push('「' + line + '」多過兩個名，已當全部互相組合');
+        warnings.push('「' + line + '」有 ' + parts.length + ' 個名 → 當佢咁互相都唔同隊');
       } else {
         warnings.push('「' + line + '」格式唔啱（要 A ! B）');
       }
