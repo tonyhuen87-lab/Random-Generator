@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v1">
+<meta name="app-version" content="v2">
 <title>兩層抽籤 · Two-Layer Random</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020}
@@ -45,7 +45,7 @@
 <body>
 <div class="wrap">
   <h1>兩層抽籤</h1>
-  <p class="sub">第一層抽資料夾，第二層抽嗰個資料夾入面嘅一項。</p>
+  <p class="sub">第一層抽資料夾，第二層抽嗰個資料夾入面嘅一項（包括 .mp4 檔）。</p>
 
   <div class="card">
     <div class="lbl">第一層 · Top folder</div>
@@ -68,19 +68,20 @@
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v1</div>
+  <div class="ver">v2</div>
 </div>
 
 <script>
-const VERSION = 'v1';
+const VERSION = 'v2';
 
-/* Data read from DS file on the Synology NAS (TH personal → Personal).
-   Update these lists and bump VERSION whenever the folders change. */
+/* Read from DS file on the Synology NAS: TH Personal / Personal
+   (v2 — 2026-10-06 late night re-read, now including the .mp4 files that sit
+   directly inside each folder, not only the subfolder names). */
 const DATA = {
-  "New Downloads": ["CAWB-049","CAWB-034","MIDA-806","WAAA-696","MCSR-642","MGNL-194","092726-001-CARIB","BOKD-320","DSOD-072","DDK-241","DSOD-066","MIKR-108","MFYD-186","START-637","KNKS-001","DSOD-037","GMEM-154","NGHJ-071","RAPD-013","RCTD-756","DVEH-093","SNOS-297","SCOP-915","OFTR-012","AVSA-445","MISM-437","SVMGM-049","LULU-436","MVSD-692"],
-  "Video New": ["MEYD-815","041523_001-1PON","SSIS-737","NKD-304","MOGI-090","SSIS-759","MISM-279","NHDTB-808","NNPJ-572","MVSD-553","EBWH-029","TKOU-006","MVSD-565","HJMO-626","OMHD-033","HMN-494","ERDM-073","NITR-541","TOTTE-143","KSBJ-274","IPZZ-129","071MXDLP-0205","MISM-297","JUFE-542","CEMD-450","SONE-010","NHDTB-869","MVG-076","MIBB-035","SKMJ-484","DVMM-073","USBA-073","YMDD-371","HAWA-313","PPPE-198","SDJS-251"],
-  "Older": [],
-  "Video Part 1": ["hdd600.com@STARS-140_UNCENSORED_LEAKED_NOWATERMARK.mp4","hdd600.com@STARS-134_UNCENSORED_LEAKED_NOWATERMARK.mp4","hhd800.com@SDMU-963_Uncensored_Leaked.mp4","pexv.xyz-HODV-21626","avmans.com-BSTC060","WAAA-123","HJMO-483 (2)","NHDTB-651","MXSPS-683","DVDMS-840","ACZD-092","ABW-088","ABW-005_uncensored","MISM-264","DVDMS-931","MISM-267","ABW-343","GMEM-092","MAZO-031"]
+  "New Downloads": ["BOKD-320","FTHTD-228","meyd-815.mp4.part-Frag1401","DSOD-037","sdms-993-uncensored-leak.mp4","CAWB-049","meyd-815.mp4.part","DSOD-072","GMEM-154","dasd-026.mp4","CAWB-034","DDK-241","meyd-815.mp4","NGHJ-071","atom-346.mp4","MIDA-806","DSOD-066","meyd-815_urls.json","RAPD-013","sdmu-075.mp4","WAAA-696","MIKR-108","RCTD-756","meyd-815_debug.json","rop-012.mp4","MCSR-642","MFYD-186","DVEH-093","mium-692.mp4","MGNL-194","ipbz-001.mp4","START-637","SNOS-297","mium-683.mp4","092726-001-CARIB","KNKS-001","fc2-ppv-1015013.mp4","200GANA-3438","300MIUM-1452"],
+  "Video New": ["HAWA-306","IPZZ-129","MIBB-035","SABA-798-C_X1080X","javbt.net_JURA-108C.mp4","MISM-279","HJMO-626","071MXDLP-0205","SKMJ-484","MEYD-815","NHDTB-808","OMHD-033","MISM-297","DVMM-073","041523_001-1PON","NNPJ-572","HMN-494","JUFE-542","USBA-073","SSIS-737","MVSD-553","ERDM-073","CEMD-450","YMDD-371","NKD-304","EBWH-029","NITR-541","SONE-010","HAWA-313","MOGI-090","TKOU-006","TOTTE-143","NHDTB-869","PPPE-198","SSIS-759","MVSD-565","KSBJ-274","MVG-076","SDJS-251","SSIS-795","SVVRT-036","TOTTE-146"],
+  "Older": ["SDMM066.mp4","dasd247-AsiaMoviePass.mp4","nitr102-AsiaMoviePass.mp4","dvdes024-AsiaMoviePass.wmv","Found_3091171720_71961648.wmv"],
+  "Video Part 1": ["109IENFH-054","ABW-088","HJMO-475","ABW-033.mp4","pexv.xyz-HODV-21626","ACZD-092","ABW-005_uncensored","avmans.com-BSTC060","NHDTB-330.mp4","MISM-264","WAAA-123","SSNI-404.mp4","DVDMS-931","HJMO-483 (2)","hdd600.com@STARS-140_UNCENSORED_LEAKED_NOWATERMARK.mp4","MISM-267","NHDTB-651","ABW-343","hdd600.com@STARS-134_UNCENSORED_LEAKED_NOWATERMARK.mp4","MXSPS-683","GMEM-092","DVDMS-840","hhd800.com@SDMU-963_Uncensored_Leaked.mp4","MAZO-031","SVDVD-939"]
 };
 
 const ROLLABLE = Object.keys(DATA).filter(k => DATA[k].length > 0);
@@ -95,19 +96,18 @@ let busy = false;
 
 function showNote() {
   const parts = ROLLABLE.map(k => `${k} (${DATA[k].length})`).join(' · ');
-  let html = `第一層可抽：<b>${parts}</b>`;
-  if (EMPTY.length) html += `<br>唔會抽到：<b>${EMPTY.join(', ')}</b>（空）`;
+  let html = `可抽：<b>${parts}</b>`;
+  if (EMPTY.length) html += `<br>空資料夾：<b>${EMPTY.join(', ')}</b>`;
   $('note').innerHTML = html;
-  $('l1meta').textContent = `共 ${ROLLABLE.length} 個資料夾`;
 }
 
 function render() {
   $('l1').textContent = L1 || '—';
   $('l1').className = 'big' + (L1 ? ' done' : ' dim');
-  if (L1) $('l1meta').textContent = `${DATA[L1].length} 個項目`;
+  $('l1meta').textContent = L1 ? `${DATA[L1].length} 個項目` : `共 ${ROLLABLE.length} 個資料夾`;
 }
 
-function spinTo(el, values, final, ms, done) {
+function spinTo(el, values, final, ms) {
   return new Promise(res => {
     const t0 = Date.now();
     const iv = setInterval(() => {
@@ -116,58 +116,47 @@ function spinTo(el, values, final, ms, done) {
         clearInterval(iv);
         el.textContent = final;
         el.className = 'big done';
-        if (done) done();
         res();
       }
     }, 70);
   });
 }
 
+function pushHistory(item) {
+  history.unshift(`${L1} → ${item}`);
+  history = history.slice(0, 5);
+  $('hist').innerHTML = history.map(h => `<b>${h}</b>`).join('<br>');
+}
+
 async function rollAll() {
   if (busy) return;
-  busy = true;
-  $('both').disabled = true;
-  $('again2').disabled = true;
-
+  busy = true; $('both').disabled = true; $('again2').disabled = true;
   L1 = pick(ROLLABLE);
   $('l1').className = 'big spin';
   $('l2').className = 'big spin';
   $('l2').textContent = '…';
   await spinTo($('l1'), ROLLABLE, L1, 900);
-
   const item = pick(DATA[L1]);
-  $('l2').textContent = '';
   await spinTo($('l2'), DATA[L1], item, 1100);
   $('l2meta').textContent = `來自「${L1}」`;
-
-  history.unshift(`${L1} → ${item}`);
-  history = history.slice(0, 5);
-  $('hist').innerHTML = history.map(h => `<b>${h}</b>`).join('<br>');
-
-  busy = false;
-  $('both').disabled = false;
-  $('again2').disabled = false;
+  pushHistory(item);
+  busy = false; $('both').disabled = false; $('again2').disabled = false;
 }
 
 async function roll2() {
   if (busy || !L1) return;
-  busy = true;
-  $('again2').disabled = true;
+  busy = true; $('again2').disabled = true;
   const item = pick(DATA[L1]);
   $('l2').className = 'big spin';
   await spinTo($('l2'), DATA[L1], item, 900);
   $('l2meta').textContent = `來自「${L1}」`;
-  history.unshift(`${L1} → ${item}`);
-  history = history.slice(0, 5);
-  $('hist').innerHTML = history.map(h => `<b>${h}</b>`).join('<br>');
-  busy = false;
-  $('again2').disabled = false;
+  pushHistory(item);
+  busy = false; $('again2').disabled = false;
 }
 
 $('both').addEventListener('click', rollAll);
 $('again2').addEventListener('click', roll2);
-showNote();
-render();
+showNote(); render();
 $('l2meta').textContent = '撳「開始抽」';
 </script>
 </body>
