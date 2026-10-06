@@ -8,10 +8,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v2">
-<title>兩層抽籤 · Two-Layer Random</title>
+<meta name="app-version" content="v3">
+<title>兩層抽籤 + 計時 · Two-Layer Random</title>
 <style>
-  :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020}
+  :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020;--bad:#ff5d5d}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%}
   body{
@@ -36,6 +36,21 @@
   button:active{transform:scale(.99)}
   button.ghost{background:var(--card2);color:var(--fg);border:1px solid var(--line);font-size:15px;padding:14px}
   button[disabled]{opacity:.5}
+
+  /* timer */
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+  .presets button{margin:0;padding:14px 6px;font-size:15px;background:var(--card2);color:var(--fg);border:1px solid var(--line)}
+  .presets button.on{background:var(--accent);color:#06121f;border-color:var(--accent)}
+  .clock{font-size:52px;font-weight:800;text-align:center;letter-spacing:.02em;font-variant-numeric:tabular-nums;margin:6px 0 4px}
+  .clock.run{color:var(--accent)}
+  .clock.zero{color:var(--bad)}
+  .bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden;margin:8px 0 14px}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s linear}
+  .tbtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .tbtns button{margin:0;padding:15px 6px;font-size:15px}
+  .start{background:var(--ok);color:#06210f}
+  .stop{background:var(--warn);color:#241800}
+  .reset{background:var(--card2);color:var(--fg);border:1px solid var(--line)}
   .hist{color:var(--dim);font-size:12px;line-height:1.7;margin-top:6px}
   .hist b{color:var(--fg);font-weight:600}
   .note{color:var(--dim);font-size:12px;border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
@@ -44,8 +59,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>兩層抽籤</h1>
-  <p class="sub">第一層抽資料夾，第二層抽嗰個資料夾入面嘅一項（包括 .mp4 檔）。</p>
+  <h1>兩層抽籤 + 計時</h1>
+  <p class="sub">第一層抽資料夾，第二層抽入面嘅一項（包括 .mp4）。下面有睇片計時器。</p>
 
   <div class="card">
     <div class="lbl">第一層 · Top folder</div>
@@ -63,20 +78,36 @@
   <button class="ghost" id="again2">↻ 只再抽第二層</button>
 
   <div class="card">
+    <div class="lbl">⏱ 計時器 · Timer</div>
+    <div class="presets" id="presets">
+      <button data-sec="30">30s</button>
+      <button data-sec="60">60s</button>
+      <button data-sec="90">90s</button>
+      <button data-sec="120">120s</button>
+    </div>
+    <div class="clock" id="clock">02:00</div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="tbtns">
+      <button class="start" id="tstart">▶ Start</button>
+      <button class="stop" id="tstop">⏸ Stop</button>
+      <button class="reset" id="treset">↺ Reset</button>
+    </div>
+    <div class="small" id="tmeta">預設 120s · 未開始</div>
+  </div>
+
+  <div class="card">
     <div class="lbl">最近抽過</div>
     <div class="hist" id="hist">—</div>
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v2</div>
+  <div class="ver">v3</div>
 </div>
 
 <script>
-const VERSION = 'v2';
+const VERSION = 'v3';
 
-/* Read from DS file on the Synology NAS: TH Personal / Personal
-   (v2 — 2026-10-06 late night re-read, now including the .mp4 files that sit
-   directly inside each folder, not only the subfolder names). */
+/* Read from DS file on the Synology NAS: TH Personal / Personal (v2 data). */
 const DATA = {
   "New Downloads": ["BOKD-320","FTHTD-228","meyd-815.mp4.part-Frag1401","DSOD-037","sdms-993-uncensored-leak.mp4","CAWB-049","meyd-815.mp4.part","DSOD-072","GMEM-154","dasd-026.mp4","CAWB-034","DDK-241","meyd-815.mp4","NGHJ-071","atom-346.mp4","MIDA-806","DSOD-066","meyd-815_urls.json","RAPD-013","sdmu-075.mp4","WAAA-696","MIKR-108","RCTD-756","meyd-815_debug.json","rop-012.mp4","MCSR-642","MFYD-186","DVEH-093","mium-692.mp4","MGNL-194","ipbz-001.mp4","START-637","SNOS-297","mium-683.mp4","092726-001-CARIB","KNKS-001","fc2-ppv-1015013.mp4","200GANA-3438","300MIUM-1452"],
   "Video New": ["HAWA-306","IPZZ-129","MIBB-035","SABA-798-C_X1080X","javbt.net_JURA-108C.mp4","MISM-279","HJMO-626","071MXDLP-0205","SKMJ-484","MEYD-815","NHDTB-808","OMHD-033","MISM-297","DVMM-073","041523_001-1PON","NNPJ-572","HMN-494","JUFE-542","USBA-073","SSIS-737","MVSD-553","ERDM-073","CEMD-450","YMDD-371","NKD-304","EBWH-029","NITR-541","SONE-010","HAWA-313","MOGI-090","TKOU-006","TOTTE-143","NHDTB-869","PPPE-198","SSIS-759","MVSD-565","KSBJ-274","MVG-076","SDJS-251","SSIS-795","SVVRT-036","TOTTE-146"],
@@ -86,13 +117,11 @@ const DATA = {
 
 const ROLLABLE = Object.keys(DATA).filter(k => DATA[k].length > 0);
 const EMPTY = Object.keys(DATA).filter(k => DATA[k].length === 0);
-
 const $ = id => document.getElementById(id);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
-let L1 = null;
-let history = [];
-let busy = false;
+/* ---------- picker ---------- */
+let L1 = null, history = [], busy = false;
 
 function showNote() {
   const parts = ROLLABLE.map(k => `${k} (${DATA[k].length})`).join(' · ');
@@ -156,8 +185,97 @@ async function roll2() {
 
 $('both').addEventListener('click', rollAll);
 $('again2').addEventListener('click', roll2);
+
+/* ---------- timer ---------- */
+let tTotal = 120;      // selected length
+let tLeft = 120;       // seconds left
+let tId = null;        // interval id
+let tRunning = false;
+
+function fmt(s) {
+  s = Math.max(0, Math.round(s));
+  const m = Math.floor(s / 60), r = s % 60;
+  return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+}
+
+function paintTimer() {
+  $('clock').textContent = fmt(tLeft);
+  $('clock').className = 'clock' + (tRunning ? ' run' : (tLeft === 0 ? ' zero' : ''));
+  const pct = tTotal ? Math.min(100, 100 * (1 - tLeft / tTotal)) : 0;
+  $('bar').style.width = pct + '%';
+  const st = tRunning ? '計時中…' : (tLeft === 0 ? '⏰ 時間到！' : (tLeft === tTotal ? '未開始' : '已暫停'));
+  $('tmeta').textContent = `預設 ${tTotal}s · ${st}`;
+  document.querySelectorAll('.presets button').forEach(b => {
+    b.classList.toggle('on', Number(b.dataset.sec) === tTotal);
+  });
+}
+
+function stopTimer() {
+  if (tId) { clearInterval(tId); tId = null; }
+  tRunning = false;
+  paintTimer();
+}
+
+function resetTimer() {
+  stopTimer();
+  tLeft = tTotal;
+  paintTimer();
+}
+
+function ding() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (Ctx) {
+      const ctx = new Ctx();
+      [0, 0.35, 0.7].forEach(t => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = 880;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + t + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.28);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.3);
+      });
+    }
+  } catch (e) {}
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300, 150, 500]);
+}
+
+function startTimer() {
+  if (tRunning) return;
+  if (tLeft <= 0) tLeft = tTotal;
+  tRunning = true;
+  paintTimer();
+  const endAt = Date.now() + tLeft * 1000;
+  if (tId) clearInterval(tId);
+  tId = setInterval(() => {
+    tLeft = (endAt - Date.now()) / 1000;
+    if (tLeft <= 0) {
+      tLeft = 0;
+      stopTimer();
+      ding();
+      return;
+    }
+    paintTimer();
+  }, 250);
+}
+
+document.querySelectorAll('.presets button').forEach(b => {
+  b.addEventListener('click', () => {
+    tTotal = Number(b.dataset.sec);
+    stopTimer();
+    tLeft = tTotal;
+    paintTimer();
+  });
+});
+$('tstart').addEventListener('click', startTimer);
+$('tstop').addEventListener('click', stopTimer);
+$('treset').addEventListener('click', resetTimer);
+
+/* ---------- init ---------- */
 showNote(); render();
 $('l2meta').textContent = '撳「開始抽」';
+paintTimer();
 </script>
 </body>
 </html>
