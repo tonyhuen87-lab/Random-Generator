@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v5">
+<meta name="app-version" content="v6">
 <title>兩層抽籤 + 計時 · Two-Layer Random</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020;--bad:#ff5d5d}
@@ -61,7 +61,7 @@
 <body>
 <div class="wrap">
   <h1>兩層抽籤 + 計時</h1>
-  <p class="sub">一撳就抽齊：資料夾 → 入面一項 → 時間，然後自動開始倒數。</p>
+  <p class="sub">一撳抽齊：資料夾 → 入面一項 → 時間；然後自己撳 Start 開始倒數。</p>
 
   <div class="card">
     <div class="lbl">第一層 · Top folder</div>
@@ -104,11 +104,11 @@
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v5</div>
+  <div class="ver">v6</div>
 </div>
 
 <script>
-const VERSION = 'v5';
+const VERSION = 'v6';
 
 /* Read from DS file on the Synology NAS: TH Personal / Personal */
 const DATA = {
@@ -183,7 +183,7 @@ function paintTimer() {
   $('bar').style.width = (inf ? 0 : (tTotal ? Math.min(100, 100 * (1 - tLeft / tTotal)) : 0)) + '%';
   let what = inf ? '∞ 無限（唔計時）' : (tMode === 'rand' ? `🎲 隨機（今次 ${tTotal}s）` : `${tTotal}s`);
   const st = inf ? '' : (tRunning ? ' · 計時中…' : (tLeft === 0 ? ' · ⏰ 時間到！' : (tLeft === tTotal ? ' · 未開始' : ' · 已暫停')));
-  $('tmeta').textContent = (L1 ? `${what}${st}` : `${what} · 抽完自動開始`) ;
+  $('tmeta').textContent = (L1 ? `${what}${st}` : `${what} · 抽完撳 Start`) ;
   document.querySelectorAll('.presets button').forEach(b => {
     const sec = b.dataset.sec;
     b.classList.toggle('on', sec === tMode || (tMode === 'fixed' && Number(sec) === tTotal));
@@ -238,8 +238,7 @@ function armTimerForDraw() {
   if (tMode === 'none') { paintTimer(); return; }
   if (tMode === 'rand') tTotal = pick(RAND_SECS);
   tLeft = tTotal;
-  paintTimer();
-  startTimer();
+  paintTimer();            // armed only — Tony presses Start himself
 }
 
 /* ---------- draws ---------- */
@@ -253,7 +252,7 @@ async function rollAll() {
   const item = pick(DATA[L1]);
   await spinTo($('l2'), DATA[L1], item, 1100);
   $('l2meta').textContent = `來自「${L1}」`;
-  armTimerForDraw();           // one tap = folder + item + time, and the countdown starts
+  armTimerForDraw();           // one tap draws folder + item + time (no auto start)
   pushHistory(item);
   busy = false; $('both').disabled = false; $('again2').disabled = false;
 }
