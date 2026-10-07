@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v4">
+<meta name="app-version" content="v5">
 <title>兩層抽籤 + 計時 · Two-Layer Random</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020;--bad:#ff5d5d}
@@ -38,13 +38,13 @@
   button[disabled]{opacity:.5}
 
   /* timer */
-  .presets{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:14px}
-  .presets button{margin:0;padding:13px 4px;font-size:13px;background:var(--card2);color:var(--fg);border:1px solid var(--line)}
-  .presets button.on{background:var(--accent);color:#06121f;border-color:var(--accent)}
+  .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:14px}
+  .presets button{margin:0;padding:13px 4px;font-size:14px;background:var(--card2);color:var(--fg);border:1px solid var(--line)}
   .presets button.on{background:var(--accent);color:#06121f;border-color:var(--accent)}
   .clock{font-size:52px;font-weight:800;text-align:center;letter-spacing:.02em;font-variant-numeric:tabular-nums;margin:6px 0 4px}
   .clock.run{color:var(--accent)}
   .clock.zero{color:var(--bad)}
+  .clock.inf{color:var(--dim);font-size:40px}
   .bar{height:8px;background:var(--card2);border-radius:99px;overflow:hidden;margin:8px 0 14px}
   .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s linear}
   .tbtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
@@ -61,7 +61,7 @@
 <body>
 <div class="wrap">
   <h1>兩層抽籤 + 計時</h1>
-  <p class="sub">第一層抽資料夾，第二層抽入面嘅一項（包括 .mp4）。下面有睇片計時器。</p>
+  <p class="sub">一撳就抽齊：資料夾 → 入面一項 → 時間，然後自動開始倒數。</p>
 
   <div class="card">
     <div class="lbl">第一層 · Top folder</div>
@@ -75,17 +75,18 @@
     <div class="small" id="l2meta"></div>
   </div>
 
-  <button id="both">🎲 開始抽</button>
+  <button id="both">🎲 開始抽（連時間）</button>
   <button class="ghost" id="again2">↻ 只再抽第二層</button>
 
   <div class="card">
-    <div class="lbl">⏱ 計時器 · Timer</div>
+    <div class="lbl">⏱ 計時 · Timer</div>
     <div class="presets" id="presets">
       <button data-sec="30">30s</button>
       <button data-sec="60">60s</button>
       <button data-sec="90">90s</button>
       <button data-sec="120">120s</button>
       <button data-sec="rand">🎲 隨機</button>
+      <button data-sec="none">∞ 無限</button>
     </div>
     <div class="clock" id="clock">02:00</div>
     <div class="bar"><i id="bar"></i></div>
@@ -94,7 +95,7 @@
       <button class="stop" id="tstop">⏸ Stop</button>
       <button class="reset" id="treset">↺ Reset</button>
     </div>
-    <div class="small" id="tmeta">預設 120s · 未開始</div>
+    <div class="small" id="tmeta">未開始</div>
   </div>
 
   <div class="card">
@@ -103,20 +104,21 @@
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v4</div>
+  <div class="ver">v5</div>
 </div>
 
 <script>
-const VERSION = 'v4';
-const RAND_SECS = [30, 60, 90, 120];
+const VERSION = 'v5';
 
-/* Read from DS file on the Synology NAS: TH Personal / Personal (v2 data). */
+/* Read from DS file on the Synology NAS: TH Personal / Personal */
 const DATA = {
   "New Downloads": ["BOKD-320","FTHTD-228","meyd-815.mp4.part-Frag1401","DSOD-037","sdms-993-uncensored-leak.mp4","CAWB-049","meyd-815.mp4.part","DSOD-072","GMEM-154","dasd-026.mp4","CAWB-034","DDK-241","meyd-815.mp4","NGHJ-071","atom-346.mp4","MIDA-806","DSOD-066","meyd-815_urls.json","RAPD-013","sdmu-075.mp4","WAAA-696","MIKR-108","RCTD-756","meyd-815_debug.json","rop-012.mp4","MCSR-642","MFYD-186","DVEH-093","mium-692.mp4","MGNL-194","ipbz-001.mp4","START-637","SNOS-297","mium-683.mp4","092726-001-CARIB","KNKS-001","fc2-ppv-1015013.mp4","200GANA-3438","300MIUM-1452"],
   "Video New": ["HAWA-306","IPZZ-129","MIBB-035","SABA-798-C_X1080X","javbt.net_JURA-108C.mp4","MISM-279","HJMO-626","071MXDLP-0205","SKMJ-484","MEYD-815","NHDTB-808","OMHD-033","MISM-297","DVMM-073","041523_001-1PON","NNPJ-572","HMN-494","JUFE-542","USBA-073","SSIS-737","MVSD-553","ERDM-073","CEMD-450","YMDD-371","NKD-304","EBWH-029","NITR-541","SONE-010","HAWA-313","MOGI-090","TKOU-006","TOTTE-143","NHDTB-869","PPPE-198","SSIS-759","MVSD-565","KSBJ-274","MVG-076","SDJS-251","SSIS-795","SVVRT-036","TOTTE-146"],
   "Older": ["SDMM066.mp4","dasd247-AsiaMoviePass.mp4","nitr102-AsiaMoviePass.mp4","dvdes024-AsiaMoviePass.wmv","Found_3091171720_71961648.wmv"],
   "Video Part 1": ["109IENFH-054","ABW-088","HJMO-475","ABW-033.mp4","pexv.xyz-HODV-21626","ACZD-092","ABW-005_uncensored","avmans.com-BSTC060","NHDTB-330.mp4","MISM-264","WAAA-123","SSNI-404.mp4","DVDMS-931","HJMO-483 (2)","hdd600.com@STARS-140_UNCENSORED_LEAKED_NOWATERMARK.mp4","MISM-267","NHDTB-651","ABW-343","hdd600.com@STARS-134_UNCENSORED_LEAKED_NOWATERMARK.mp4","MXSPS-683","GMEM-092","DVDMS-840","hhd800.com@SDMU-963_Uncensored_Leaked.mp4","MAZO-031","SVDVD-939"]
 };
+
+const RAND_SECS = [30, 60, 90, 120];   // the random pool (無限 is not in it)
 
 const ROLLABLE = Object.keys(DATA).filter(k => DATA[k].length > 0);
 const EMPTY = Object.keys(DATA).filter(k => DATA[k].length === 0);
@@ -155,46 +157,18 @@ function spinTo(el, values, final, ms) {
 }
 
 function pushHistory(item) {
-  history.unshift(`${L1} → ${item}`);
+  const t = tMode === 'none' ? '∞' : `· ${tTotal}s`;
+  history.unshift(`${L1} → ${item} ${t}`);
   history = history.slice(0, 5);
   $('hist').innerHTML = history.map(h => `<b>${h}</b>`).join('<br>');
 }
 
-async function rollAll() {
-  if (busy) return;
-  busy = true; $('both').disabled = true; $('again2').disabled = true;
-  L1 = pick(ROLLABLE);
-  $('l1').className = 'big spin';
-  $('l2').className = 'big spin';
-  $('l2').textContent = '…';
-  await spinTo($('l1'), ROLLABLE, L1, 900);
-  const item = pick(DATA[L1]);
-  await spinTo($('l2'), DATA[L1], item, 1100);
-  $('l2meta').textContent = `來自「${L1}」`;
-  pushHistory(item);
-  busy = false; $('both').disabled = false; $('again2').disabled = false;
-}
-
-async function roll2() {
-  if (busy || !L1) return;
-  busy = true; $('again2').disabled = true;
-  const item = pick(DATA[L1]);
-  $('l2').className = 'big spin';
-  await spinTo($('l2'), DATA[L1], item, 900);
-  $('l2meta').textContent = `來自「${L1}」`;
-  pushHistory(item);
-  busy = false; $('again2').disabled = false;
-}
-
-$('both').addEventListener('click', rollAll);
-$('again2').addEventListener('click', roll2);
-
 /* ---------- timer ---------- */
-let tTotal = 120;          // selected length (this run)
-let tLeft = 120;           // seconds left
-let tId = null;            // interval id
+let tMode = 'rand';        // 'fixed' | 'rand' | 'none'
+let tTotal = 120;
+let tLeft = 120;
+let tId = null;
 let tRunning = false;
-let tMode = 'fixed';       // 'fixed' | 'rand'
 
 function fmt(s) {
   s = Math.max(0, Math.round(s));
@@ -203,28 +177,22 @@ function fmt(s) {
 }
 
 function paintTimer() {
-  $('clock').textContent = fmt(tLeft);
-  $('clock').className = 'clock' + (tRunning ? ' run' : (tLeft === 0 ? ' zero' : ''));
-  const pct = tTotal ? Math.min(100, 100 * (1 - tLeft / tTotal)) : 0;
-  $('bar').style.width = pct + '%';
-  const st = tRunning ? '計時中…' : (tLeft === 0 ? '⏰ 時間到！' : (tLeft === tTotal ? '未開始' : '已暫停'));
-  $('tmeta').textContent = (tMode === 'rand' ? `🎲 隨機（今次 ${tTotal}s）` : `預設 ${tTotal}s`) + ' · ' + st;
+  const inf = tMode === 'none';
+  $('clock').textContent = inf ? '∞' : fmt(tLeft);
+  $('clock').className = 'clock' + (inf ? ' inf' : (tRunning ? ' run' : (tLeft === 0 ? ' zero' : '')));
+  $('bar').style.width = (inf ? 0 : (tTotal ? Math.min(100, 100 * (1 - tLeft / tTotal)) : 0)) + '%';
+  let what = inf ? '∞ 無限（唔計時）' : (tMode === 'rand' ? `🎲 隨機（今次 ${tTotal}s）` : `${tTotal}s`);
+  const st = inf ? '' : (tRunning ? ' · 計時中…' : (tLeft === 0 ? ' · ⏰ 時間到！' : (tLeft === tTotal ? ' · 未開始' : ' · 已暫停')));
+  $('tmeta').textContent = (L1 ? `${what}${st}` : `${what} · 抽完自動開始`) ;
   document.querySelectorAll('.presets button').forEach(b => {
     const sec = b.dataset.sec;
-    b.classList.toggle('on', tMode === 'rand' ? sec === 'rand' : Number(sec) === tTotal);
+    b.classList.toggle('on', sec === tMode || (tMode === 'fixed' && Number(sec) === tTotal));
   });
 }
 
 function stopTimer() {
   if (tId) { clearInterval(tId); tId = null; }
   tRunning = false;
-  paintTimer();
-}
-
-function resetTimer() {
-  stopTimer();
-  if (tMode === 'rand') tTotal = pick(RAND_SECS);
-  tLeft = tTotal;
   paintTimer();
 }
 
@@ -248,6 +216,7 @@ function ding() {
 }
 
 function startTimer() {
+  if (tMode === 'none') { stopTimer(); paintTimer(); return; }
   if (tRunning) return;
   if (tLeft <= 0) {
     if (tMode === 'rand') tTotal = pick(RAND_SECS);
@@ -259,38 +228,74 @@ function startTimer() {
   if (tId) clearInterval(tId);
   tId = setInterval(() => {
     tLeft = (endAt - Date.now()) / 1000;
-    if (tLeft <= 0) {
-      tLeft = 0;
-      stopTimer();
-      ding();
-      return;
-    }
+    if (tLeft <= 0) { tLeft = 0; stopTimer(); ding(); return; }
     paintTimer();
   }, 250);
 }
 
+function armTimerForDraw() {
+  stopTimer();
+  if (tMode === 'none') { paintTimer(); return; }
+  if (tMode === 'rand') tTotal = pick(RAND_SECS);
+  tLeft = tTotal;
+  paintTimer();
+  startTimer();
+}
+
+/* ---------- draws ---------- */
+async function rollAll() {
+  if (busy) return;
+  busy = true; $('both').disabled = true; $('again2').disabled = true;
+  stopTimer();
+  L1 = pick(ROLLABLE);
+  $('l1').className = 'big spin'; $('l2').className = 'big spin'; $('l2').textContent = '…';
+  await spinTo($('l1'), ROLLABLE, L1, 900);
+  const item = pick(DATA[L1]);
+  await spinTo($('l2'), DATA[L1], item, 1100);
+  $('l2meta').textContent = `來自「${L1}」`;
+  armTimerForDraw();           // one tap = folder + item + time, and the countdown starts
+  pushHistory(item);
+  busy = false; $('both').disabled = false; $('again2').disabled = false;
+}
+
+async function roll2() {
+  if (busy || !L1) return;
+  busy = true; $('again2').disabled = true;
+  const item = pick(DATA[L1]);
+  $('l2').className = 'big spin';
+  await spinTo($('l2'), DATA[L1], item, 900);
+  $('l2meta').textContent = `來自「${L1}」`;
+  pushHistory(item);
+  busy = false; $('again2').disabled = false;
+}
+
+$('both').addEventListener('click', rollAll);
+$('again2').addEventListener('click', roll2);
+
 document.querySelectorAll('.presets button').forEach(b => {
   b.addEventListener('click', () => {
     stopTimer();
-    if (b.dataset.sec === 'rand') {
-      tMode = 'rand';
-      tTotal = pick(RAND_SECS);
-    } else {
-      tMode = 'fixed';
-      tTotal = Number(b.dataset.sec);
-    }
-    tLeft = tTotal;
+    const sec = b.dataset.sec;
+    if (sec === 'none') { tMode = 'none'; }
+    else if (sec === 'rand') { tMode = 'rand'; tTotal = pick(RAND_SECS); tLeft = tTotal; }
+    else { tMode = 'fixed'; tTotal = Number(sec); tLeft = tTotal; }
     paintTimer();
   });
 });
 $('tstart').addEventListener('click', startTimer);
 $('tstop').addEventListener('click', stopTimer);
-$('treset').addEventListener('click', resetTimer);
+$('treset').addEventListener('click', () => {
+  stopTimer();
+  if (tMode === 'none') { paintTimer(); return; }
+  if (tMode === 'rand') tTotal = pick(RAND_SECS);
+  tLeft = tTotal;
+  paintTimer();
+});
 
 /* ---------- init ---------- */
 showNote(); render();
 $('l2meta').textContent = '撳「開始抽」';
-paintTimer();
+tTotal = pick(RAND_SECS); tLeft = tTotal; paintTimer();
 </script>
 </body>
 </html>
