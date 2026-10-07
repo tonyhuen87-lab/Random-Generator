@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v7">
+<meta name="app-version" content="v8">
 <title>兩層抽籤 + 計時 · Two-Layer Random</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020;--bad:#ff5d5d}
@@ -103,11 +103,11 @@
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v7</div>
+  <div class="ver">v8</div>
 </div>
 
 <script>
-const VERSION = 'v7';
+const VERSION = 'v8';
 
 /* Read from DS file on the Synology NAS: TH Personal / Personal */
 const DATA = {
@@ -117,7 +117,12 @@ const DATA = {
   "Video Part 1": ["109IENFH-054","ABW-088","HJMO-475","ABW-033.mp4","pexv.xyz-HODV-21626","ACZD-092","ABW-005_uncensored","avmans.com-BSTC060","NHDTB-330.mp4","MISM-264","WAAA-123","SSNI-404.mp4","DVDMS-931","HJMO-483 (2)","hdd600.com@STARS-140_UNCENSORED_LEAKED_NOWATERMARK.mp4","MISM-267","NHDTB-651","ABW-343","hdd600.com@STARS-134_UNCENSORED_LEAKED_NOWATERMARK.mp4","MXSPS-683","GMEM-092","DVDMS-840","hhd800.com@SDMU-963_Uncensored_Leaked.mp4","MAZO-031","SVDVD-939"]
 };
 
-const RAND_POOL = [30, 60, 90, 120, 'inf'];   // 🎲 隨機 pool — includes 無限
+const RAND_SECS = [30, 60, 90, 120];       // the timed options
+const INF_CHANCE = 0.5;                     // 🎲 隨機: 50% chance of ∞
+function drawRandomTime() {                 // -> 'inf' 50%, else 30/60/90/120 (12.5% each)
+  if (Math.random() < INF_CHANCE) return 'inf';
+  return pick(RAND_SECS);
+}
 
 const ROLLABLE = Object.keys(DATA).filter(k => DATA[k].length > 0);
 const EMPTY = Object.keys(DATA).filter(k => DATA[k].length === 0);
@@ -130,6 +135,7 @@ let L1 = null, history = [], busy = false;
 function showNote() {
   const parts = ROLLABLE.map(k => `${k} (${DATA[k].length})`).join(' · ');
   let html = `可抽：<b>${parts}</b>`;
+  html += '<br>🎲 隨機＝<b>50% ∞</b>，其餘 30/60/90/120 <b>各 12.5%</b>';
   if (EMPTY.length) html += `<br>空資料夾：<b>${EMPTY.join(', ')}</b>`;
   $('note').innerHTML = html;
 }
@@ -218,7 +224,11 @@ function startTimer() {
   if (tInf) { stopTimer(); paintTimer(); return; }
   if (tRunning) return;
   if (tLeft <= 0) {
-    if (tMode === 'rand') tTotal = pick(RAND_POOL.filter(x => x !== 'inf'));
+    if (tMode === 'rand') {
+      const d = drawRandomTime();
+      if (d === 'inf') { tInf = true; tLeft = 0; paintTimer(); return; }
+      tInf = false; tTotal = d;
+    }
     tLeft = tTotal;
   }
   tRunning = true;
@@ -236,7 +246,7 @@ function startTimer() {
 function applyDrawTime() {
   if (tMode === 'none') { tInf = true; return; }
   if (tMode === 'rand') {
-    const d = pick(RAND_POOL);
+    const d = drawRandomTime();
     if (d === 'inf') { tInf = true; return; }
     tInf = false; tTotal = d; tLeft = d; return;
   }
