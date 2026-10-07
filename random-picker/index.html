@@ -8,7 +8,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="apple-mobile-web-app-title" content="兩層抽">
-<meta name="app-version" content="v6">
+<meta name="app-version" content="v7">
 <title>兩層抽籤 + 計時 · Two-Layer Random</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--warn:#ffb020;--bad:#ff5d5d}
@@ -61,7 +61,7 @@
 <body>
 <div class="wrap">
   <h1>兩層抽籤 + 計時</h1>
-  <p class="sub">一撳抽齊：資料夾 → 入面一項 → 時間；然後自己撳 Start 開始倒數。</p>
+  <p class="sub">一撳抽齊：資料夾 → 入面一項 → 時間（🎲 隨機會連 ∞ 一齊抽）；然後自己撳 Start。</p>
 
   <div class="card">
     <div class="lbl">第一層 · Top folder</div>
@@ -87,7 +87,6 @@
       <button data-sec="120">120s</button>
       <button data-sec="rand">🎲 隨機</button>
       <button data-sec="none">∞ 無限</button>
-    </div>
     <div class="clock" id="clock">02:00</div>
     <div class="bar"><i id="bar"></i></div>
     <div class="tbtns">
@@ -104,11 +103,11 @@
   </div>
 
   <div class="note" id="note"></div>
-  <div class="ver">v6</div>
+  <div class="ver">v7</div>
 </div>
 
 <script>
-const VERSION = 'v6';
+const VERSION = 'v7';
 
 /* Read from DS file on the Synology NAS: TH Personal / Personal */
 const DATA = {
@@ -118,7 +117,7 @@ const DATA = {
   "Video Part 1": ["109IENFH-054","ABW-088","HJMO-475","ABW-033.mp4","pexv.xyz-HODV-21626","ACZD-092","ABW-005_uncensored","avmans.com-BSTC060","NHDTB-330.mp4","MISM-264","WAAA-123","SSNI-404.mp4","DVDMS-931","HJMO-483 (2)","hdd600.com@STARS-140_UNCENSORED_LEAKED_NOWATERMARK.mp4","MISM-267","NHDTB-651","ABW-343","hdd600.com@STARS-134_UNCENSORED_LEAKED_NOWATERMARK.mp4","MXSPS-683","GMEM-092","DVDMS-840","hhd800.com@SDMU-963_Uncensored_Leaked.mp4","MAZO-031","SVDVD-939"]
 };
 
-const RAND_SECS = [30, 60, 90, 120];   // the random pool (無限 is not in it)
+const RAND_POOL = [30, 60, 90, 120, 'inf'];   // 🎲 隨機 pool — includes 無限
 
 const ROLLABLE = Object.keys(DATA).filter(k => DATA[k].length > 0);
 const EMPTY = Object.keys(DATA).filter(k => DATA[k].length === 0);
@@ -157,7 +156,7 @@ function spinTo(el, values, final, ms) {
 }
 
 function pushHistory(item) {
-  const t = tMode === 'none' ? '∞' : `· ${tTotal}s`;
+  const t = tInf ? '· ∞' : `· ${tTotal}s`;
   history.unshift(`${L1} → ${item} ${t}`);
   history = history.slice(0, 5);
   $('hist').innerHTML = history.map(h => `<b>${h}</b>`).join('<br>');
@@ -165,6 +164,7 @@ function pushHistory(item) {
 
 /* ---------- timer ---------- */
 let tMode = 'rand';        // 'fixed' | 'rand' | 'none'
+let tInf = false;          // is THIS run unlimited?
 let tTotal = 120;
 let tLeft = 120;
 let tId = null;
@@ -177,12 +177,11 @@ function fmt(s) {
 }
 
 function paintTimer() {
-  const inf = tMode === 'none';
+  const inf = tInf;
   $('clock').textContent = inf ? '∞' : fmt(tLeft);
   $('clock').className = 'clock' + (inf ? ' inf' : (tRunning ? ' run' : (tLeft === 0 ? ' zero' : '')));
   $('bar').style.width = (inf ? 0 : (tTotal ? Math.min(100, 100 * (1 - tLeft / tTotal)) : 0)) + '%';
-  let what = inf ? '∞ 無限（唔計時）' : (tMode === 'rand' ? `🎲 隨機（今次 ${tTotal}s）` : `${tTotal}s`);
-  const st = inf ? '' : (tRunning ? ' · 計時中…' : (tLeft === 0 ? ' · ⏰ 時間到！' : (tLeft === tTotal ? ' · 未開始' : ' · 已暫停')));
+  let what = inf ? '∞ 無限（唔計時）' : (tMode === 'rand' ? `🎲 隨機（今次 ${tTotal}s）` : `${tTotal}s`);  const st = inf ? '' : (tRunning ? ' · 計時中…' : (tLeft === 0 ? ' · ⏰ 時間到！' : (tLeft === tTotal ? ' · 未開始' : ' · 已暫停')));
   $('tmeta').textContent = (L1 ? `${what}${st}` : `${what} · 抽完撳 Start`) ;
   document.querySelectorAll('.presets button').forEach(b => {
     const sec = b.dataset.sec;
@@ -216,10 +215,10 @@ function ding() {
 }
 
 function startTimer() {
-  if (tMode === 'none') { stopTimer(); paintTimer(); return; }
+  if (tInf) { stopTimer(); paintTimer(); return; }
   if (tRunning) return;
   if (tLeft <= 0) {
-    if (tMode === 'rand') tTotal = pick(RAND_SECS);
+    if (tMode === 'rand') tTotal = pick(RAND_POOL.filter(x => x !== 'inf'));
     tLeft = tTotal;
   }
   tRunning = true;
@@ -233,12 +232,21 @@ function startTimer() {
   }, 250);
 }
 
+/* decide THIS run's time (used by the draw, by Reset, and when picking a preset) */
+function applyDrawTime() {
+  if (tMode === 'none') { tInf = true; return; }
+  if (tMode === 'rand') {
+    const d = pick(RAND_POOL);
+    if (d === 'inf') { tInf = true; return; }
+    tInf = false; tTotal = d; tLeft = d; return;
+  }
+  tInf = false; tLeft = tTotal;
+}
+
 function armTimerForDraw() {
   stopTimer();
-  if (tMode === 'none') { paintTimer(); return; }
-  if (tMode === 'rand') tTotal = pick(RAND_SECS);
-  tLeft = tTotal;
-  paintTimer();            // armed only — Tony presses Start himself
+  applyDrawTime();         // armed only — Tony presses Start himself
+  paintTimer();
 }
 
 /* ---------- draws ---------- */
@@ -275,9 +283,9 @@ document.querySelectorAll('.presets button').forEach(b => {
   b.addEventListener('click', () => {
     stopTimer();
     const sec = b.dataset.sec;
-    if (sec === 'none') { tMode = 'none'; }
-    else if (sec === 'rand') { tMode = 'rand'; tTotal = pick(RAND_SECS); tLeft = tTotal; }
-    else { tMode = 'fixed'; tTotal = Number(sec); tLeft = tTotal; }
+    if (sec === 'none') { tMode = 'none'; tInf = true; }
+    else if (sec === 'rand') { tMode = 'rand'; applyDrawTime(); }
+    else { tMode = 'fixed'; tInf = false; tTotal = Number(sec); tLeft = tTotal; }
     paintTimer();
   });
 });
@@ -285,16 +293,14 @@ $('tstart').addEventListener('click', startTimer);
 $('tstop').addEventListener('click', stopTimer);
 $('treset').addEventListener('click', () => {
   stopTimer();
-  if (tMode === 'none') { paintTimer(); return; }
-  if (tMode === 'rand') tTotal = pick(RAND_SECS);
-  tLeft = tTotal;
+  applyDrawTime();
   paintTimer();
 });
 
 /* ---------- init ---------- */
 showNote(); render();
 $('l2meta').textContent = '撳「開始抽」';
-tTotal = pick(RAND_SECS); tLeft = tTotal; paintTimer();
+applyDrawTime(); paintTimer();
 </script>
 </body>
 </html>
