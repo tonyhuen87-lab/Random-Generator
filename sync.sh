@@ -4,11 +4,12 @@
 set -e
 cd "$(dirname "$0")"
 
-rm -rf random-list team-maker random-picker
-mkdir -p random-list team-maker random-picker
+rm -rf random-list team-maker random-picker sku-check
+mkdir -p random-list team-maker random-picker sku-check
 
 cp ../random-list/index.html random-list/
 cp ../random-picker/index.html random-picker/
+cp ../sku-check/index.html sku-check/
 cp ../team-maker/index.html ../team-maker/solver.js ../team-maker/test-solver.js team-maker/
 
 python3 - <<'PY'
