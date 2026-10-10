@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="robots" content="noindex,nofollow">
-<meta name="app-version" content="v4-TEST">
+<meta name="app-version" content="v5-TEST">
 <title>Stock Check · 庫存查詢 (TEST)</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--bad:#ff5d5d;--warn:#ffb020}
@@ -53,7 +53,9 @@
   <div class="disclaimer">
     <b>免責聲明 Disclaimer</b><br>
     庫存數量僅供參考。請儘快下單以確認實際可供貨量。<br>
-    <i>Stock level is for reference only. Please place order promptly to confirm stock availability.</i>
+    <i>Stock level is for reference only. Please place order promptly to confirm stock availability.</i><br><br>
+    任何由 PM／銷售預留（prehold）或 hold 起嘅庫存，唔會反映在此查詢工具内。<br>
+    <i>Any prehold or hold stock by PM / sales is not reflected in this stock checker.</i>
   </div>
 
   <div class="hint">
@@ -65,11 +67,11 @@
     <b>資料更新 / Data refresh</b>：星期一至五 10:10 – 18:10，每小時 :10 更新<br>
     Mon–Fri, 10:10–18:10, refreshed at 10 minutes past each hour.
   </div>
-  <div class="ver">v4-TEST</div>
+  <div class="ver">v5-TEST</div>
 </div>
 
 <script>
-const VERSION = 'v4-TEST';
+const VERSION = 'v5-TEST';
 /* Snapshot read from Synnex VIP › Inventory (ASUS) on 2026-10-10 ~21:14. TEST SAMPLE. */
 const UPDATED = '2026-10-10 21:14';
 const DATA = [
