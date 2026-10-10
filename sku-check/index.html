@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="robots" content="noindex,nofollow">
-<meta name="app-version" content="v5-TEST">
+<meta name="app-version" content="v6-TEST">
 <title>Stock Check · 庫存查詢 (TEST)</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--bad:#ff5d5d;--warn:#ffb020}
@@ -67,13 +67,13 @@
     <b>資料更新 / Data refresh</b>：星期一至五 10:10 – 18:10，每小時 :10 更新<br>
     Mon–Fri, 10:10–18:10, refreshed at 10 minutes past each hour.
   </div>
-  <div class="ver">v5-TEST</div>
+  <div class="ver">v6-TEST</div>
 </div>
 
 <script>
-const VERSION = 'v5-TEST';
+const VERSION = 'v6-TEST';
 /* Snapshot read from Synnex VIP › Inventory (ASUS) on 2026-10-10 ~21:14. TEST SAMPLE. */
-const UPDATED = '2026-10-10 21:14';
+const UPDATED = '2026-10-10 21:56';
 const DATA = [
   ["B760M-AYW WIFI", 36],
   ["B860M AYW GAMING WIFI", 35],
@@ -132,7 +132,7 @@ const DATA = [
 const q = document.getElementById('q');
 const out = document.getElementById('out');
 const meta = document.getElementById('meta');
-meta.textContent = `資料最後更新 Last updated：${UPDATED} · ${DATA.length} 個料號 SKUs（測試樣本 sample）`;
+meta.textContent = `資料最後更新 Last updated：${UPDATED} · ${DATA.length} 個料號 SKUs（ASUS）`;
 
 function norm(s){ return s.toUpperCase().replace(/\s+/g,' ').trim(); }
 
