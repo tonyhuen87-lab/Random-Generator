@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0b0f14">
 <meta name="robots" content="noindex,nofollow">
-<meta name="app-version" content="v1-TEST">
+<meta name="app-version" content="v2-TEST">
 <title>Stock Check · 庫存查詢 (TEST)</title>
 <style>
   :root{--bg:#0b0f14;--card:#141b23;--card2:#1b242e;--line:#26313d;--fg:#e8eef5;--dim:#8fa1b3;--accent:#4ea1ff;--ok:#35d07f;--bad:#ff5d5d;--warn:#ffb020}
@@ -28,7 +28,8 @@
   .pn{font-weight:700;font-size:16px;word-break:break-all}
   .qty{font-size:15px;margin-top:6px}
   .qty b{font-size:22px}
-  .instock{color:var(--ok)}
+  .instock{color:var(--ok);font-weight:700}
+  .warn{color:var(--warn);font-weight:700}
   .nostock{color:var(--bad);font-weight:700}
   .empty{color:var(--dim);text-align:center;padding:26px 10px}
   .hint{color:var(--dim);font-size:12px;border-top:1px solid var(--line);margin-top:16px;padding-top:12px}
@@ -38,7 +39,7 @@
 <body>
 <div class="wrap">
   <h1>庫存查詢 · Stock Check</h1>
-  <p class="sub">輸入料號（或關鍵字）→ 顯示可供應數量</p>
+  <p class="sub">輸入料號（或關鍵字）→ 查有冇貨</p>
 
   <div class="testbar">⚠️ 測試版（TEST）— 資料為一個時間點快照，只顯示 Public Qty。未正式對外。</div>
 
@@ -48,14 +49,14 @@
   <div id="out"><div class="empty">輸入料號或關鍵字開始查詢</div></div>
 
   <div class="hint">
-    <b>注意</b>：只反映 <b>Public Qty</b>（可供應數量）。顯示 <b>No stock</b> = 暫時無可供數量，可向你的銷售代表查詢。<br>
+    <b>注意</b>：答覆分四級：<b>In stock</b>（≥10）· <b>Limited stock</b>（3–9）· <b>In stock, but check with sales team</b>（1–2）· <b>No stock</b>（0）。<br>
     資料更新：星期一至五 10:00–18:00（每小時）。
   </div>
-  <div class="ver">v1-TEST</div>
+  <div class="ver">v2-TEST</div>
 </div>
 
 <script>
-const VERSION = 'v1-TEST';
+const VERSION = 'v2-TEST';
 /* Snapshot read from Synnex VIP › Inventory (ASUS) on 2026-10-10 ~21:14. TEST SAMPLE. */
 const UPDATED = '2026-10-10 21:14';
 const DATA = [
@@ -120,6 +121,18 @@ meta.textContent = `資料最後更新：${UPDATED} · 共 ${DATA.length} 個料
 
 function norm(s){ return s.toUpperCase().replace(/\s+/g,' ').trim(); }
 
+/* Availability bands (per Tony, 10 Oct):
+   >= 10        -> In stock
+   3 .. 9       -> Limited stock
+   1 .. 2       -> In stock, but check with sales team
+   0            -> No stock            */
+function status(q){
+  if (q <= 0) return {cls:'nostock', text:'No stock'};
+  if (q <= 2) return {cls:'warn',    text:'In stock, but check with sales team'};
+  if (q < 10) return {cls:'warn',    text:'Limited stock'};
+  return {cls:'instock', text:'In stock'};
+}
+
 function render(){
   const raw = q.value.trim();
   if (!raw){ out.innerHTML = '<div class="empty">輸入料號或關鍵字開始查詢</div>'; return; }
@@ -130,10 +143,10 @@ function render(){
     return;
   }
   out.innerHTML = hits.map(([pn, qty]) => {
-    const inStock = qty > 0;
+    const s = status(qty);
     return `<div class="result">
       <div class="pn">${pn}</div>
-      <div class="qty">${inStock ? `<span class="instock">Public Qty: <b>${qty}</b></span>` : `<span class="nostock">No stock</span>`}</div>
+      <div class="qty"><span class="${s.cls}">${s.text}</span></div>
     </div>`;
   }).join('');
 }
